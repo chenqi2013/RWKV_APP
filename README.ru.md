@@ -95,6 +95,8 @@ RWKV App поддерживает многоходовые диалоги, пр�
 
 **Убедитесь, что у вас настроена среда разработки [Flutter](https://flutter.dev/).**
 
+> Для разработки требуется **Flutter 3.41.1+** (рекомендуется stable channel).
+
 1. **Клонирование репозитория:**
 
 ```bash
@@ -119,7 +121,7 @@ flutter pub get
 
 4. **（Необязательно）Установка зависимостей для каталога `tools`:**
 
-*Это избавляет от предупреждения «В проекте есть ошибки» в VS Code и Cursor при запуске приложения.*
+_Это избавляет от предупреждения «В проекте есть ошибки» в VS Code и Cursor при запуске приложения._
 
 ```bash
 cd tools; flutter pub get; cd ..;
@@ -130,6 +132,17 @@ cd tools; flutter pub get; cd ..;
 ```bash
 flutter run
 ```
+
+#### Отладка Windows ARM64 (QNN)
+
+Если вы отлаживаете на Windows ARM64, раскомментируйте следующий блок в `pubspec.yaml`:
+
+```yaml
+- path: assets/lib/qnn-windows/
+  platforms: [windows]
+```
+
+Для отладки на Windows ARM64 используйте ветку Flutter `master`, а не `stable`.
 
 ## 🛠️ Технические особенности
 
@@ -152,6 +165,7 @@ flutter run
 
 - 🐞 **Нашли ошибку или проблему?** [Сообщите об этом здесь!](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D)
 - 💡 **Есть предложение?** [Предложите функцию!](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)
+- 🎨 **Хотите внести свой вариант темы?** [Быстрый старт по темам](CONTRIBUTING.ru.md)
 
 ## 📄 Лицензия
 

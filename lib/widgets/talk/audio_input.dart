@@ -1,12 +1,16 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:ui';
 
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/demo_type.dart';
 import 'package:zone/model/world_type.dart';
@@ -104,7 +108,7 @@ class AudioInput extends ConsumerWidget {
       bottomMessageSize = 16;
     }
 
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
 
     return AnimatedPositioned(
       duration: 250.ms,
@@ -113,7 +117,7 @@ class AudioInput extends ConsumerWidget {
       left: 0,
       child: MeasureSize(
         onChange: (size) {
-          P.chat.inputHeight.q = size.height + 30;
+          P.chat.ttsBottomHeight.q = size.height;
         },
         child: SizedBox(
           height: _kWidgetSize + bottomAdjust,
@@ -130,9 +134,9 @@ class AudioInput extends ConsumerWidget {
                     gradient: showGradient
                         ? LinearGradient(
                             colors: [
-                              customTheme.scaffold.q(0),
-                              customTheme.scaffold,
-                              customTheme.scaffold,
+                              appTheme.scaffoldBg.q(0),
+                              appTheme.scaffoldBg,
+                              appTheme.scaffoldBg,
                             ],
                             begin: .topCenter,
                             end: .bottomCenter,

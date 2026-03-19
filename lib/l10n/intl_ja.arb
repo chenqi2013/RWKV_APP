@@ -15,12 +15,22 @@
   "visual_understanding_and_ocr": "視覚理解とOCR",
   "please_select_an_image_first": "まず画像を選択してください",
   "change_selected_image": "画像を変更",
-  "show_escape_characters": "改行文字を表示",
+  "render_newline_directly": "改行をそのままレンダリング",
   "line_break_rendered": "改行文字が表示されました",
   "escape_characters_rendered": "改行文字が表示されました",
+  "render_space_symbol": "空白記号をレンダリング",
+  "space_rendered": "スペースが表示されました",
+  "space_symbols_rendered": "スペース記号が表示されました",
+  "space_symbol_settings": "スペース記号設定",
+  "line_break_symbol_settings": "改行記号設定",
+  "space_symbol_style": "スペース記号スタイル",
+  "text_color": "文字色",
+  "background_color": "背景色",
+  "preview": "プレビュー",
   "show_prefill_log_only": "Prefill ログのみ表示",
   "text": "テキスト",
   "life_span": "Life Span",
+  "less_than_01_gb": "0.01 GB 未満",
   "refreshed": "更新",
   "state_panel": "状態パネル",
   "open_state_panel": "状態パネルを開く",
@@ -36,6 +46,7 @@
   "thinking_mode_alert_footer": "モード",
   "think_mode_selector_title": "推論モードを選択してください",
   "think_mode_selector_message": "推論モードは、モデルの推論時のパフォーマンスに影響します",
+  "think_mode_selector_recommendation": "少なくとも「推論-速い」を選択することをおすすめします",
   "think_button_mode_fast": "推論{footer}-速い",
   "think_button_mode_en": "推論{footer}-英語",
   "think_button_mode_en_short": "推論{footer}-英語 短",
@@ -44,12 +55,33 @@
   "model_size_increased_please_open_a_new_conversation": "モデルサイズが大きくなりました。会話の品質を向上させるために、新しい会話を開始してください",
   "batch_inference_short": "並列",
   "your_voice_is_empty": "音声データが空です。マイクを確認してください",
+  "tts_voice_source_sheet_title": "RWKV がまねる声を選択",
+  "tts_voice_source_sheet_subtitle": "次のいずれかの方法で音声サンプルを選択してください",
+  "tts_voice_source_preset_title": "プリセット音声",
+  "tts_voice_source_preset_subtitle": "RWKV に組み込まれたプリセット音声から選ぶ",
+  "tts_voice_source_my_voice_title": "自分の声",
+  "tts_voice_source_my_voice_subtitle": "自分の声を録音して、RWKV にまねさせる",
+  "tts_voice_source_file_title": "音声ファイル",
+  "tts_voice_source_file_subtitle": "RWKV にまねさせたい WAV ファイルを選択",
+  "tts_voice_source_file_panel_hint": "下の音声ファイルの声で音声を生成します",
   "batch_inference_running": "並列推論を実行中、同時に{count}件のメッセージを生成しています",
   "batch_inference_selected": "{index}番目のメッセージが選択されました",
   "this_model_does_not_support_batch_inference": "このモデルは並列推論をサポートしていません。「batch」タグのあるモデルを選択してください",
   "enabled": "有効",
   "disabled": "無効",
   "please_select_a_branch_to_continue_the_conversation": "会話を続けるにはブランチを選択してください",
+  "branch_switcher_tooltip_first": "すでに最初のメッセージです",
+  "branch_switcher_tooltip_prev": "前のメッセージ",
+  "branch_switcher_tooltip_last": "すでに最後のメッセージです",
+  "branch_switcher_tooltip_next": "次のメッセージ",
+  "user_message_branch_switched": "分岐を切り替えました",
+  "user_message_actions_panel_title": "メッセージ操作",
+  "user_message_actions_panel_empty": "このメッセージで利用できる操作はありません",
+  "user_message_actions_panel_switch_branch_title": "ブランチ切り替え",
+  "user_message_actions_panel_switch_branch_subtitle": "前へ / 次へ で隣接するブランチを切り替えます",
+  "delete_current_branch": "現在のメッセージを削除",
+  "delete_branch_title": "現在のメッセージを削除",
+  "delete_branch_confirmation_message": "これは危険な操作です。現在のメッセージとそのすべての子ノード、さらに関連するデータベース記録を完全に削除します。この操作は元に戻せません。続行しますか？",
   "screen_width": "画面幅",
   "batch_inference_button": "並列 × {count}",
   "batch_inference": "並列推論",
@@ -128,6 +160,7 @@
   "select_a_world_type": "タスクの種類を選択",
   "please_select_a_world_type": "タスクの種類を選択してください",
   "loading": "ロード中...",
+  "loading_progress_percent": "読み込み{percent}%",
   "cancel": "キャンセル",
   "session_configuration": "セッション構成",
   "apply": "適用",
@@ -175,6 +208,9 @@
   "please_select_application_language": "アプリケーション言語を選択してください",
   "please_select_font_size": "フォントサイズを選択してください",
   "font_size": "フォントサイズ",
+  "message_line_height": "メッセージ行間",
+  "use_default_line_height": "デフォルトの行間を使う",
+  "message_line_height_default_hint": "デフォルトはフォントとレンダラー本来の行間を使うため、固定の 1.0x ではありません。ここでのカスタム範囲は 1.0x から 2.0x です。",
   "font_setting": "フォント設定",
   "ui_font_setting": "UI フォント設定",
   "monospace_font_setting": "等幅フォント設定",
@@ -211,7 +247,14 @@
   "new_game": "新しいゲーム",
   "rwkv": "RWKV",
   "prefill": "事前入力",
+  "prefill_progress_percent": "プレフィル進捗 {percent}",
   "decode": "デコード",
+  "message_token_count": "メッセージのトークン数",
+  "conversation_token_count": "現在の会話のトークン数",
+  "conversation_token_limit_hint_short": "新しいチャットを推奨",
+  "conversation_token_limit_recommend_new_chat": "この会話は 8,000 トークンを超えています。新しいチャットを開始することをおすすめします。",
+  "prefill_speed_tokens_per_second": "プレフィル速度（1秒あたりのトークン数）",
+  "decode_speed_tokens_per_second": "デコード速度（1秒あたりのトークン数）",
   "current_turn": "現在のターン",
   "start_a_new_game": "ゲーム開始",
   "please_wait_for_the_model_to_generate": "モデルの生成を待ってください",
@@ -329,11 +372,6 @@
   "prompt": "プロンプト",
   "output": "出力",
   "model_output": "モデル出力: {text}",
-  "@model_output": {
-    "placeholders": {
-      "text": {}
-    }
-  },
   "submit": "送信",
   "regenerate": "再生成",
   "resume": "再開",
@@ -407,6 +445,8 @@
   "model": "モデル",
   "no_model_selected": "モデルが選択されていません",
   "change": "変更",
+  "edit": "編集",
+  "editing": "編集中",
   "status": "ステータス",
   "translating": "翻訳中...",
   "idle": "待機中",
@@ -416,38 +456,13 @@
   "start_service": "サービスを開始",
   "lan_server": "LANサーバー",
   "http_service_port": "HTTPサービス（ポート：{port}）",
-  "@http_service_port": {
-    "placeholders": {
-      "port": {}
-    }
-  },
   "websocket_service_port": "WebSocketサービス（ポート：{port}）",
-  "@websocket_service_port": {
-    "placeholders": {
-      "port": {}
-    }
-  },
   "browser_status": "ブラウザのステータス",
   "no_browser_windows_connected": "接続されているブラウザウィンドウはありません",
   "start_service_and_open_browser": "サービスを開始し、サポートされているブラウザページを開いてください。",
   "window_id": "ウィンドウ {id}",
-  "@window_id": {
-    "placeholders": {
-      "id": {}
-    }
-  },
   "x_tabs": "{count}個のタブ",
-  "@x_tabs": {
-    "placeholders": {
-      "count": {}
-    }
-  },
   "queued_x": "キュー内：{count}",
-  "@queued_x": {
-    "placeholders": {
-      "count": {}
-    }
-  },
   "translator_debug_info": "翻訳者デバッグ情報",
   "cached_translations_memory": "キャッシュされた翻訳（メモリ）",
   "cached_translations_disk": "キャッシュされた翻訳（ディスク）",
@@ -534,7 +549,7 @@
   "presence_penalty_with_value": "Presence Penalty: {value}",
   "frequency_penalty_with_value": "Frequency Penalty: {value}",
   "penalty_decay_with_value": "Penalty Decay: {value}",
-  "font_preview_user_message": "Hello! こんにちは！これはユーザーメッセージのプレビューです。",
+  "font_preview_user_message": "Hello! こんにちは！これはユーザーメッセージのプレビューです。\n2 行目も選択した行間に合わせて変わります。",
   "font_preview_markdown_asset": "assets/lib/font_preview/font_preview_ja.md",
   "ocr_title": "OCR",
   "hide_translations": "翻訳を非表示",
@@ -544,21 +559,14 @@
   "camera": "カメラ",
   "gallery": "ギャラリー",
   "ocr_guide_text": "{takePhoto} をクリックしてください。RWKV が画像内のテキストを翻訳します。",
-  "@ocr_guide_text": {
-    "placeholders": {
-      "takePhoto": {}
-    }
-  },
   "reached_bottom": "お楽しみに",
   "open_database_folder": "データベースフォルダを開く",
   "npu_not_supported_title": "お使いのチップ {socName} の NPU サポートはまだ利用できません",
-  "@npu_not_supported_title": {
-    "placeholders": {
-      "socName": {}
-    }
-  },
   "adapting_more_inference_chips": "より多くの推論チップへの対応を継続しています。ご期待ください。",
   "other_files": "その他のファイル (これらのファイルは期限切れまたはサポートされなくなった重みファイルであり、RWKV Chat ではもう使用されていない可能性があります)",
+  "mlx_cache": "MLX/CoreML キャッシュ",
+  "mlx_cache_notice": "MLX/CoreML キャッシュを削除すると容量を解放できますが、次回の MLX/CoreML モデル読み込みが遅くなります。",
+  "delete_mlx_cache_confirmation": "この MLX/CoreML キャッシュを削除しますか？",
   "import_weight_file": "重みファイルをインポート",
   "import_success": "インポート成功",
   "import_failed": "インポート失敗",
@@ -581,23 +589,11 @@
   "import_all_weight_files": "すべての重みファイルをインポート",
   "import_all_weight_files_description": "このアプリからエクスポートされたZIPファイルを選択してください。ZIPファイル内のすべての重みファイルがインポートされます。同じ名前のファイルが存在する場合、既存のファイルが上書きされます。",
   "import_all_weight_files_success": "インポート成功：{count} 個のファイルをインポートしました",
-  "@import_all_weight_files_success": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "invalid_zip_file": "無効なZIPファイルまたはファイル形式が認識されません",
   "no_files_in_zip": "ZIPファイル内に有効な重みファイルが見つかりませんでした",
   "current_model_from_latest_json_not_pth": "現在読み込んでいるのは latest.json の設定であり、ローカル .pth ファイルではありません",
   "no_local_pth_loaded_yet": "読み込み済みのローカル .pth ファイルはありません",
   "ctx_length_label": "ctx {length}",
-  "@ctx_length_label": {
-    "placeholders": {
-      "length": {}
-    }
-  },
   "local_pth_option_files_in_config": "設定ファイルの重み",
   "local_pth_option_local_pth_files": "ローカル .pth ファイル",
   "select_weights_or_local_pth_hint": "設定ファイルの重みまたはローカル .pth ファイルを選択",
@@ -629,17 +625,7 @@
   "folder_not_found_on_device": "お使いのデバイスでこのフォルダが見つかりませんでした",
   "folder_not_accessible_check_permission": "このフォルダにアクセスできません。フォルダの権限を確認してください",
   "path_label": "パス：{path}",
-  "@path_label": {
-    "placeholders": {
-      "path": {}
-    }
-  },
   "local_folder_name": "ローカルフォルダ：{folderName}",
-  "@local_folder_name": {
-    "placeholders": {
-      "folderName": {}
-    }
-  },
   "custom_directory_set": "カスタムディレクトリを設定しました",
   "reset_to_default_directory": "デフォルトディレクトリに戻しました",
   "failed_to_create_directory": "ディレクトリの作成に失敗しました",
@@ -650,33 +636,44 @@
   "moving_files": "ファイルを移動中...",
   "already_using_this_directory": "既にこのディレクトリを使用しています",
   "files_moved_with_failures": "{successCount}個のファイルを移動、{failCount}個が失敗",
-  "@files_moved_with_failures": {
-    "placeholders": {
-      "successCount": {},
-      "failCount": {}
-    }
-  },
   "please_manually_migrate_files": "パスを更新しました。ファイルの移動が必要な場合は手動で行ってください。",
   "open_folder_unsupported_on_platform": "現在のOS（{os}）ではフォルダを開く操作はサポートされていません。",
-  "@open_folder_unsupported_on_platform": {
-    "placeholders": {
-      "os": {}
-      }
-    },
-    "delete_finished": "削除が完了しました",
-    "failed_to_delete_file": "ファイルの削除に失敗しました: {error}",
-    "@failed_to_delete_file": {
-      "placeholders": {
-        "error": {}
-      }
-    },
-    "open_folder_path_is_null": "フォルダパスが空です。",
-    "open_folder_creating_empty": "フォルダが存在しないため、空のフォルダを作成しています。",
-    "open_folder_created_success": "空のフォルダの作成に成功しました。",
-    "open_folder_create_failed": "空のフォルダの作成に失敗しました：{error}",
-    "@open_folder_create_failed": {
-      "placeholders": {
-        "error": {}
-      }
-    }
+  "delete_finished": "削除が完了しました",
+  "failed_to_delete_file": "ファイルの削除に失敗しました: {error}",
+  "open_folder_path_is_null": "フォルダパスが空です。",
+  "open_folder_creating_empty": "フォルダが存在しないため、空のフォルダを作成しています。",
+  "open_folder_created_success": "空のフォルダの作成に成功しました。",
+  "open_folder_create_failed": "空のフォルダの作成に失敗しました：{error}",
+  "model_item_ios18_weight_hint": "iOS 18以降にアップグレードすると、このウェイトが使え、より速く省電力になります",
+  "tts_is_running_please_wait": "TTS を実行中です。完了するまでお待ちください。",
+  "please_select_a_spk_or_a_wav_file": "プリセット音声を選択するか、自分の声を録音してください",
+  "please_enter_text_to_generate_tts": "TTS を生成するテキストを入力してください",
+  "windows_architecture_mismatch_warning": "アーキテクチャの不一致を検出しました：このアプリの Build Architecture は {buildArchitecture} ですが、Windows Operating System の Architecture は {operatingSystemArchitecture} です。公式ダウンロードページから一致する版をダウンロードしてください：{url}",
+  "windows_architecture_mismatch_dialog_title": "アーキテクチャ不一致",
+  "windows_architecture_mismatch_dialog_message": "このアプリの Build Architecture は {buildArchitecture} ですが、Windows Operating System の Architecture は {operatingSystemArchitecture} です。\n\n公式ダウンロードページから一致する実行ファイルをダウンロードしてください：\n{url}",
+  "open_official_download_page": "公式ダウンロードページを開く",
+  "mimic": "ミミック",
+  "ask": "質問",
+  "question_generator": "質問ジェネレーター",
+  "question_generator_mock_description": "どう聞き始めればいいか迷ったら、まずは RWKV に 1 つ考えてもらいましょう。",
+  "question_generator_mock_batch_description": "少しヒントが欲しいときは、RWKV にいくつか質問を考えてもらいましょう。",
+  "question_generator_empty_chat_hint": "上の書き出しを選んでから「生成」を押すと、RWKV がそのまま聞ける質問を 1 つ考えてくれます。",
+  "question_generator_empty_chat_batch_hint": "上の書き出しを選んでから「生成」を押すと、RWKV がそのまま聞ける質問をいくつか考えてくれます。",
+  "question_generator_tap_generate_hint": "「生成」を押すと、RWKV が選んだ書き出しから最大 {count} 件の質問案を考えてくれます。",
+  "question_generator_language_switched_hint": "言語を切り替えると、上に並ぶ書き出しも一緒に切り替わります。気になるものを選んで、その続きから考えてもらいましょう。",
+  "question_generator_prefix_guide": "下の書き出しをいろいろ試すと、RWKV がその続きから質問を作ってくれます。下の入力欄を直接編集して、自分らしい書き出しにすることもできます。",
+  "question_generator_prefixes": "質問の書き出し",
+  "question_generator_count": "生成数",
+  "question_generator_prefix_input_placeholder": "ここに質問の書き出しを書いてみましょう...",
+  "question_generator_context_prefix_input_placeholder": "空欄のままにすると、RWKV が文脈に基づいて質問を生成します。",
+  "question_generator_prefix_required": "先に質問の書き出しを入力してください",
+  "question_generator_question_action_guide": "生成された質問をタップすると、チャット入力欄にそのまま入れられます。",
+  "question_language": "RWKV にこの言語で質問してほしい...",
+  "prefix_bank": "前置きグループ",
+  "prefix_examples": "前置きの例",
+  "generated_questions": "生成される質問",
+  "english": "English",
+  "japanese": "日本語",
+  "korean": "한국어",
+  "russian": "Русский"
 }

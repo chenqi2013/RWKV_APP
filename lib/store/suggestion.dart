@@ -131,7 +131,7 @@ class _Suggestion {
         }
         break;
       case .tts:
-        return config.tts.toList().shuffled.take(5).toList();
+        return _buildMixedTalkSuggestions(config.tts);
       default:
         return [];
     }
@@ -167,8 +167,7 @@ class _Suggestion {
 
     final config = ref.watch(P.suggestion.config);
 
-    final r = config.tts.toList().shuffled.take(5).toList();
-    return r;
+    return _buildMixedTalkSuggestions(config.tts);
   });
 
   Future<void> loadSuggestions() async {
@@ -176,7 +175,7 @@ class _Suggestion {
     final lang = shouldUseEn ? "en" : "zh";
     dynamic config;
     try {
-      config = await _get("http://120.77.3.4:3010/suggestions.json") as dynamic;
+      config = await _get(Config.suggestionsUrl) as dynamic;
       if (config == null) {
         throw "empty response";
       }
@@ -234,6 +233,34 @@ extension _$Suggestion on _Suggestion {
 
 /// Public methods
 extension $Suggestion on _Suggestion {}
+
+List<String> _buildMixedTalkSuggestions(List<String> rawSuggestions) {
+  const totalCount = 5;
+  const intonationCount = 1;
+  const normalCount = totalCount - intonationCount;
+
+  final normalSuggestions = rawSuggestions.toList().shuffled.toList();
+  final selectedNormal = normalSuggestions.length <= normalCount ? normalSuggestions : normalSuggestions.take(normalCount).toList();
+
+  final intonationSuggestions = _buildIntonationSuggestionDisplays().shuffled.toList();
+  if (intonationSuggestions.isEmpty) {
+    if (normalSuggestions.length <= totalCount) return normalSuggestions;
+    return normalSuggestions.take(totalCount).toList();
+  }
+
+  final mixed = <String>[
+    ...selectedNormal,
+    intonationSuggestions.first,
+  ];
+  return mixed.shuffled.toList();
+}
+
+List<String> _buildIntonationSuggestionDisplays() {
+  return TTSInstruction.intonation.options.indexMap((index, option) {
+    final emoji = TTSInstruction.intonation.emojiOptions[index];
+    return "$emoji$option";
+  });
+}
 
 class _DefaultSuggestion {
   static const SuggestionConfig zh = SuggestionConfig(

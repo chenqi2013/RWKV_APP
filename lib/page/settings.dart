@@ -1,13 +1,17 @@
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// Project imports:
 import 'package:zone/widgets/settings.dart';
-import 'package:zone/widgets/gradient_background.dart';
 
 class PageSettings extends ConsumerWidget {
   const PageSettings({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const GradientBackground(child: Settings(noBorderRadiusAndAppBar: true));
+    return const Settings(noBorderRadiusAndAppBar: true);
   }
 }

@@ -1,5 +1,8 @@
+// Package imports:
 import 'package:collection/collection.dart';
 import 'package:halo_state/halo_state.dart';
+
+// Project imports:
 import 'package:zone/args.dart';
 import 'package:zone/model/decode_param_type.dart';
 import 'package:zone/store/p.dart';
@@ -100,7 +103,7 @@ enum Argument {
     presencePenalty => DecodeParamType.defaults.presencePenalty,
     frequencyPenalty => DecodeParamType.defaults.frequencyPenalty,
     penaltyDecay => DecodeParamType.defaults.penaltyDecay,
-    maxLength => Args.maxTokens > 0 ? Args.maxTokens.toDouble() : 4000,
+    maxLength => Args.maxTokens > 0 ? Args.maxTokens.toDouble() : 10000,
     batchCount => Args.batchCount.toDouble(),
     batchVW => Args.batchVW.toDouble(),
   };
@@ -112,7 +115,7 @@ enum Argument {
     presencePenalty => DecodeParamType.defaults.presencePenalty,
     frequencyPenalty => DecodeParamType.defaults.frequencyPenalty,
     penaltyDecay => DecodeParamType.defaults.penaltyDecay,
-    maxLength => Args.maxTokens > 0 ? Args.maxTokens.toDouble() : 2000,
+    maxLength => Args.maxTokens > 0 ? Args.maxTokens.toDouble() : 10000,
     batchCount => Args.batchCount.toDouble(),
     batchVW => Args.batchVW.toDouble(),
   };

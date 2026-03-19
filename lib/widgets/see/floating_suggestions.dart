@@ -1,15 +1,16 @@
-// ignore: unused_import
-import 'dart:convert';
-import 'dart:io';
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:halo/halo.dart';
-import 'package:halo_state/halo_state.dart';
+
+// Project imports:
 import 'package:zone/store/p.dart';
+import 'package:zone/widgets/input_interactions.dart';
+import 'package:zone/widgets/suggestion_chips.dart';
 
 class FloatingSuggestions extends ConsumerWidget {
-  static const defaultHeight = 46.0;
+  static const defaultHeight = 40.0;
 
   const FloatingSuggestions({super.key});
 
@@ -21,35 +22,18 @@ class FloatingSuggestions extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final primary = Theme.of(context).colorScheme.primary;
-    final qb = P.app.qb.q;
-    final qw = P.app.qw.q;
+    final appTheme = ref.watch(P.app.theme);
+    final bgColor = appTheme.qb144;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const .symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        children: [
-          for (var item in suggestions)
-            Padding(
-              padding: const .only(right: 4),
-              child: OutlinedButton(
-                onPressed: () => P.see.onSuggestionTap(item),
-                style: TextButton.styleFrom(
-                  foregroundColor: primary,
-                  backgroundColor: Platform.isIOS ? qw.q(.9) : qw,
-                  padding: const .symmetric(horizontal: 10, vertical: 0),
-                  visualDensity: .compact,
-                  shape: RoundedRectangleBorder(borderRadius: .circular(6)),
-                ),
-                child: Text(
-                  item,
-                  style: TextStyle(fontSize: 14, color: qb, fontWeight: .w400),
-                ),
-              ),
-            ),
-        ],
-      ),
+    return SuggestionChips(
+      suggestions: suggestions,
+      onTap: (String item) => P.see.onSuggestionTap(item),
+      height: InputInteractions.calculateButtonHeight(context),
+      listPadding: const .only(left: 12, right: 12, bottom: 0),
+      chipPadding: const .symmetric(horizontal: 12, vertical: 0),
+      backgroundColor: bgColor,
+      borderColor: appTheme.qb11,
+      textColor: appTheme.qb4,
     );
   }
 }

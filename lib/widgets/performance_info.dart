@@ -1,8 +1,11 @@
-// ignore: unused_import
-
+// Flutter imports:
 import 'package:flutter/cupertino.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
 import 'package:zone/store/p.dart';
 
 class PerformanceInfo extends ConsumerWidget {
@@ -25,10 +28,10 @@ class PerformanceInfo extends ConsumerWidget {
       mainAxisAlignment: .center,
       children: [
         Text.rich(
-          style: TS(c: qb.q(.6), s: 10),
+          style: TS(c: qb.q(1), s: 10),
           TextSpan(
             children: [
-              TextSpan(text: short ? "P: " : "Prefill: "),
+              TextSpan(text: short ? "P " : "Prefill "),
               TextSpan(
                 text: prefillSpeed.toStringAsFixed(1),
                 style: TS(ff: monospaceFF),
@@ -38,10 +41,10 @@ class PerformanceInfo extends ConsumerWidget {
           ),
         ),
         Text.rich(
-          style: TS(c: qb.q(.6), s: 10),
+          style: TS(c: qb.q(1), s: 10),
           TextSpan(
             children: [
-              TextSpan(text: short ? "D: " : "Decode: "),
+              TextSpan(text: short ? "D " : "Decode "),
               TextSpan(
                 text: decodeSpeed.toStringAsFixed(1),
                 style: TS(ff: monospaceFF),

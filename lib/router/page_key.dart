@@ -1,20 +1,29 @@
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_roleplay/flutter_roleplay.dart' show RoleplayManageModelType;
 import 'package:flutter_roleplay/services/role_play_manage.dart' show RoleplayManage;
 import 'package:go_router/go_router.dart';
+
+// Project imports:
 import 'package:zone/page/advanced_sesttings.dart' show PageAdvancedSettings;
-import 'package:zone/page/font_settings.dart' show PageFontSettings;
 import 'package:zone/page/benchmark.dart' show PageBenchmark;
+import 'package:zone/page/bot_message_bottom_preview.dart';
 import 'package:zone/page/chat.dart';
 import 'package:zone/page/completion/completion_page.dart';
 import 'package:zone/page/conversation.dart';
+import 'package:zone/page/font_settings.dart' show PageFontSettings;
 import 'package:zone/page/home.dart';
+import 'package:zone/page/interactions_preview.dart';
 import 'package:zone/page/ocr.dart';
 import 'package:zone/page/othello.dart';
 import 'package:zone/page/see.dart';
 import 'package:zone/page/settings.dart';
 import 'package:zone/page/sudoku.dart';
 import 'package:zone/page/talk.dart';
+import 'package:zone/page/test.dart';
+import 'package:zone/page/test_2.dart';
 import 'package:zone/page/translator.dart';
 import 'package:zone/page/weight_manager.dart';
 import 'package:zone/router/router.dart';
@@ -31,6 +40,8 @@ enum PageKey {
   advancedSettings,
   fontSettings,
   benchmark,
+  interactionsPreview,
+  botMessageBottomPreview,
   othello,
   sudoku,
   rolePlaying,
@@ -41,6 +52,8 @@ enum PageKey {
   see,
   ocr,
   weightManager,
+  test,
+  test2,
   ;
 
   String get path => "/$name";
@@ -60,6 +73,8 @@ enum PageKey {
     weightManager => const PageWeightManager(),
     translator => const PageTranslator(),
     benchmark => const PageBenchmark(),
+    interactionsPreview => const PageInteractionsPreview(),
+    botMessageBottomPreview => const PageBotMessageBottomPreview(),
     lambada => const PageBenchmark(),
     advancedSettings => const PageAdvancedSettings(),
     fontSettings => const PageFontSettings(),
@@ -86,6 +101,8 @@ enum PageKey {
       },
     ),
     ocr => const PageOcr(),
+    test => const PageTest(),
+    test2 => const PageTest2(),
   };
 
   GoRoute get route {

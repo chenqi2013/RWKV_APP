@@ -1,10 +1,13 @@
+// Package imports:
 import 'package:equatable/equatable.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/decode_param_type.dart';
 
 extension SamplerAndPenaltyParamWithString on List<SamplerAndPenaltyParam> {
   String get rawDecodeParams {
-    final List<String> res = [];
+    final res = <String>[];
     for (var i = 0; i < length; i++) {
       res.add(
         "${this[i].temperature}, ${this[i].topP}, ${this[i].presencePenalty}, ${this[i].frequencyPenalty}, ${this[i].penaltyDecay}",
@@ -14,8 +17,8 @@ extension SamplerAndPenaltyParamWithString on List<SamplerAndPenaltyParam> {
   }
 
   static List<SamplerAndPenaltyParam> fromRawDecodeParams(String rawDecodeParams) {
-    final List<SamplerAndPenaltyParam> res = [];
-    final List<String> params = rawDecodeParams.split("|").where((e) => e.isNotEmpty).toList();
+    final res = <SamplerAndPenaltyParam>[];
+    final params = rawDecodeParams.split("|").where((e) => e.isNotEmpty).toList();
     for (var i = 0; i < params.length; i++) {
       final param = params[i].split(",");
       final temperature = double.parse(param[0]);

@@ -1,48 +1,62 @@
-// ignore: unused_import
+// Dart imports:
+import 'dart:ui';
 
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
+import 'package:zone/gen/assets.gen.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/store/p.dart';
+import 'package:zone/widgets/chat/interaction_visual_state.dart';
+
+String _extractInteractionSuffix({
+  required String source,
+  required String separator,
+}) {
+  final separatorIndex = source.lastIndexOf(separator);
+  if (separatorIndex < 0) return source;
+  return source.substring(separatorIndex + separator.length);
+}
 
 class ThinkingModeButton extends ConsumerWidget {
   const ThinkingModeButton({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
     final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
+    final s = S.of(context);
+    final fontSize = theme.textTheme.bodyMedium?.fontSize ?? 14;
+    final appTheme = ref.watch(P.app.theme);
     final loading = ref.watch(P.rwkv.loading);
-    ref.watch(P.app.qw);
+    final generating = ref.watch(P.rwkv.generating);
+    final loaded = ref.watch(P.rwkv.loaded);
     final thinkingMode = ref.watch(P.rwkv.thinkingMode);
 
-    final color = switch (thinkingMode) {
-      .lighting => theme.colorScheme.surfaceContainer,
-      .fast => theme.colorScheme.surfaceContainer,
-      .none => theme.colorScheme.surfaceContainer,
-      .free => primary,
-      .preferChinese => primary,
-      .en => primary,
-      .enShort => theme.colorScheme.surfaceContainer,
-      .enLong => primary,
+    final canEnable = loaded && !loading && !generating;
+    final InteractionVisualState interactionState = switch (thinkingMode) {
+      .none => canEnable ? .idleInteractive : .unavailable,
+      .fast => canEnable ? .available : .unavailable,
+      .lighting => canEnable ? .available : .unavailable,
+      .free => canEnable ? .enabled : .unavailable,
+      .en => canEnable ? .enabled : .unavailable,
+      .enShort => canEnable ? .enabled : .unavailable,
+      .enLong => canEnable ? .enabled : .unavailable,
+      .preferChinese => canEnable ? .enabled : .unavailable,
     };
-
-    final textColor = switch (thinkingMode) {
-      .lighting => primary,
-      .fast => primary,
-      .none => Colors.grey,
-      .preferChinese => theme.colorScheme.onPrimary,
-      .free => theme.colorScheme.onPrimary,
-      .en => theme.colorScheme.onPrimary,
-      .enShort => primary,
-      .enLong => theme.colorScheme.onPrimary,
-    };
+    final colors = interactionVisualColors(appTheme: appTheme, state: interactionState);
+    final color = colors.background;
+    final textColor = colors.foreground;
+    final border = Border.all(color: colors.border);
 
     final textScaleFactor = MediaQuery.textScalerOf(context);
-    final height = textScaleFactor.scale(14) + 20;
-    const EdgeInsets padding = .symmetric(horizontal: 8);
+    final height = textScaleFactor.scale(fontSize) + 20;
+    const padding = EdgeInsets.symmetric(horizontal: 8);
 
     final text = switch (thinkingMode) {
       .lighting => s.thinking_mode_auto(""),
@@ -54,17 +68,12 @@ class ThinkingModeButton extends ConsumerWidget {
       .enShort => s.think_button_mode_en_short(""),
       .enLong => s.think_button_mode_en_long(""),
     };
+    final compactText = _extractInteractionSuffix(source: text, separator: s.hyphen);
 
-    final Border? border = switch (thinkingMode) {
-      .lighting => .all(color: textColor),
-      .none => null,
-      .free => .all(color: textColor),
-      .preferChinese => .all(color: textColor),
-      .fast => .all(color: textColor),
-      .en => .all(color: textColor),
-      .enShort => .all(color: textColor),
-      .enLong => .all(color: textColor),
-    };
+    final useBackdropFilter = ref.watch(P.ui.useBackdropFilterForInputOptions);
+    final backdropFilterBgAlphaForInputOptions = ref.watch(P.ui.backdropFilterBgAlphaForInputOptions);
+    final backdropFilterBgAlphaForInputOptionsDarkModifier = ref.watch(P.ui.backdropFilterBgAlphaForInputOptionsDarkModifier);
+    final sigma = ref.watch(P.ui.sigmaForBackdropFilterForInputOptions);
 
     return AnimatedSize(
       key: const Key("_ThinkingModeButton"),
@@ -76,25 +85,50 @@ class ThinkingModeButton extends ConsumerWidget {
           duration: 250.ms,
           child: GestureDetector(
             onTap: P.rwkv.onThinkModeTapped,
-            child: SizedBox(
-              height: height,
-              child: Container(
-                padding: padding,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: .circular(60),
-                  border: border,
+            child: ClipRRect(
+              borderRadius: .circular(60),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: sigma.toDouble(),
+                  sigmaY: sigma.toDouble(),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.lightbulb_outline, color: textColor, size: 18),
-                    const SizedBox(width: 2),
-                    Text(
-                      text,
-                      style: TS(c: textColor, s: 14, height: 1, w: .w500),
+                enabled: useBackdropFilter,
+                child: SizedBox(
+                  height: height,
+                  child: Container(
+                    padding: padding,
+                    decoration: BoxDecoration(
+                      color: color.q(
+                        useBackdropFilter
+                            ? backdropFilterBgAlphaForInputOptions * backdropFilterBgAlphaForInputOptionsDarkModifier
+                            : 1,
+                      ),
+                      borderRadius: .circular(60),
+                      border: border,
                     ),
-                    const SizedBox(width: 4),
-                  ],
+                    child: Row(
+                      children: [
+                        SvgPicture.asset(
+                          Assets.img.chat.think,
+                          colorFilter: .mode(textColor, BlendMode.srcIn),
+                          width: appTheme.inputBarInteractionsIconSize,
+                          height: appTheme.inputBarInteractionsIconSize,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          compactText,
+                          style: TS(c: textColor, s: fontSize, height: 1, w: .w500),
+                          strutStyle: StrutStyle(
+                            fontSize: fontSize,
+                            height: 1,
+                            forceStrutHeight: true,
+                            leadingDistribution: TextLeadingDistribution.even,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

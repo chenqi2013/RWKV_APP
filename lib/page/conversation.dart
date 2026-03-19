@@ -1,16 +1,23 @@
-import 'package:adaptive_dialog/adaptive_dialog.dart';
+// Dart imports:
+import 'dart:math';
+
+// Flutter imports:
 import 'package:flutter/material.dart';
-import 'package:zone/func/open_folder.dart';
+
+// Package imports:
+import 'package:adaptive_dialog/adaptive_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_roleplay/services/role_play_manage.dart' show RoleplayManage;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:path_provider/path_provider.dart';
+
+// Project imports:
+import 'package:zone/func/open_folder.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/store/p.dart';
-import 'package:zone/widgets/gradient_background.dart';
 import 'package:zone/widgets/conversation_item.dart';
 
 final _roleplayConvList = qs<List<ConversationListItemData>>([]);
@@ -57,50 +64,17 @@ class _PageConversationState extends ConsumerState<PageConversation> {
     final conversations = ref.watch(_compositedConversations);
     final isEmpty = conversations.isEmpty;
     final isBatchMode = ref.watch(P.conversation.isBatchMode);
+    final appTheme = ref.watch(P.app.theme);
 
     return Scaffold(
-      body: GradientBackground(
-        child: Column(
-          children: [
-            const _ConversationAppBar(),
-            isEmpty ? const Expanded(child: _EmptyState()) : const Expanded(child: _ConversationList()),
-            if (isBatchMode) const _BatchActionBar(),
-          ],
-        ),
+      backgroundColor: appTheme.settingBg,
+      body: Column(
+        children: [
+          const _ConversationAppBar(),
+          isEmpty ? const Expanded(child: _EmptyState()) : const Expanded(child: _ConversationList()),
+          if (isBatchMode) const _BatchActionBar(),
+        ],
       ),
-    );
-  }
-
-  Widget buildConversationItem(ConversationListItemData item, int index) {
-    return Dismissible(
-      key: Key(item.id.toString()),
-      background: Container(
-        color: Colors.redAccent,
-        padding: const .only(right: 24),
-        alignment: .centerRight,
-        child: const FaIcon(FontAwesomeIcons.trashCan, color: Colors.white),
-      ),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (d) async {
-        final s = S.of(context);
-        final res = await showOkCancelAlertDialog(
-          context: context,
-          title: s.delete_conversation,
-          message: s.delete_conversation_message,
-          okLabel: s.delete,
-          cancelLabel: s.cancel,
-          isDestructiveAction: true,
-        );
-        return res == OkCancelResult.ok;
-      },
-      onDismissed: (d) async {
-        if (item.isRoleplay) {
-          await RoleplayManage.deleteRolePlaySession(item.roleName!);
-          return;
-        }
-        await P.conversation.onDeleteClicked(context, item.conv!);
-      },
-      child: ConversationItem(conversation: item),
     );
   }
 }
@@ -110,12 +84,11 @@ class _ConversationAppBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(P.app.customTheme);
+    final theme = ref.watch(P.app.theme);
     final isBatchMode = ref.watch(P.conversation.isBatchMode);
     final selectedConversations = ref.watch(P.conversation.selectedConversations);
     final selectedCount = selectedConversations.length;
     final conversations = ref.watch(P.conversation.conversations);
-    final isEmpty = conversations.isEmpty;
     final isDesktop = ref.watch(P.app.isDesktop);
     final s = S.of(context);
 
@@ -124,6 +97,20 @@ class _ConversationAppBar extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       systemOverlayStyle: theme.isLight ? P.app.systemOverlayStyleLight : P.app.systemOverlayStyleDark,
       primary: true,
+      automaticallyImplyLeading: false,
+      centerTitle: true,
+      leading: isBatchMode
+          ? TextButton(
+              onPressed: () => P.conversation.toggleBatchMode(),
+              child: Text(s.cancel),
+            )
+          : IconButton(
+              onPressed: () => P.conversation.toggleBatchMode(),
+              // child: Text(s.conversation_management),
+              icon: const Icon(Icons.list),
+              tooltip: s.conversation_management,
+            ),
+      leadingWidth: isBatchMode ? 80 : null,
       actions: [
         if (isDesktop && !isBatchMode)
           IconButton(
@@ -136,11 +123,6 @@ class _ConversationAppBar extends ConsumerWidget {
             onPressed: _handleNewChat,
             icon: const FaIcon(FontAwesomeIcons.squarePlus),
           ),
-        if (!isEmpty && !isBatchMode)
-          TextButton(
-            onPressed: () => P.conversation.toggleBatchMode(),
-            child: Text(s.conversation_management),
-          ),
         if (isBatchMode)
           TextButton(
             onPressed: selectedCount == conversations.length
@@ -149,11 +131,6 @@ class _ConversationAppBar extends ConsumerWidget {
             child: Text(
               selectedCount == conversations.length ? s.cancel_all_selection : s.select_all,
             ),
-          ),
-        if (isBatchMode)
-          TextButton(
-            onPressed: () => P.conversation.toggleBatchMode(),
-            child: Text(s.cancel),
           ),
       ],
     );
@@ -181,8 +158,10 @@ class _ConversationList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversations = ref.watch(_compositedConversations);
+    final appTheme = ref.watch(P.app.theme);
+    final paddingBottom = ref.watch(P.app.paddingBottom);
     return ListView.separated(
-      padding: const .only(bottom: 60),
+      padding: .only(bottom: max(paddingBottom, 12) + appTheme.tabBarHeight + 12),
       itemCount: conversations.length,
       cacheExtent: 200,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -200,7 +179,7 @@ class _ConversationSeparator extends StatelessWidget {
     return Divider(
       height: 0,
       indent: 68,
-      endIndent: 12,
+      endIndent: 0,
       color: Theme.of(context).dividerColor.q(.2),
     );
   }
@@ -332,7 +311,7 @@ class _BatchActionBar extends ConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                '已选择: $selectedCount',
+                s.selected_count(selectedCount),
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: .w500,

@@ -1,18 +1,21 @@
-// ignore: unused_import
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_roleplay/models/chat_message_model.dart' show ChatMessage;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:sprintf/sprintf.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/db/db.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/store/p.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 class ConversationListItemData {
   final int id;
@@ -74,19 +77,25 @@ class ConversationListItemData {
   }
 
   static String _processTitle(String title) {
-    final List<String> allStrings = [];
-
-    for (var i = Config.userMsgModifierSep.length - 1; i > 0; i--) {
-      allStrings.add(Config.userMsgModifierSep.substring(0, i));
+    final String separator = Config.userMsgModifierSep;
+    String processed = title.split(separator).first.trimRight();
+    if (processed.isEmpty) {
+      return processed;
     }
 
-    String processed = title;
+    final partialPrefixes = List<String>.generate(
+      separator.length - 1,
+      (int index) => separator.substring(0, separator.length - 1 - index),
+    );
 
-    for (var string in allStrings) {
-      processed = processed.replaceAll(string, '');
+    for (final partialPrefix in partialPrefixes) {
+      if (!processed.endsWith(partialPrefix)) {
+        continue;
+      }
+      processed = processed.substring(0, processed.length - partialPrefix.length).trimRight();
+      return processed;
     }
 
-    processed = processed.replaceAll(Config.userMsgModifierSep.substring(0, Config.userMsgModifierSep.length - 1), '');
     return processed;
   }
 
@@ -210,13 +219,14 @@ class ConversationItem extends ConsumerWidget {
     final color = P.conversation.getConversationColor(conversation.id);
     final isBatchMode = ref.watch(P.conversation.isBatchMode);
     final isSelected = ref.watch(P.conversation.selectedConversations).contains(conversation.id);
+    final appTheme = ref.watch(P.app.theme);
 
     return GestureDetector(
       onTap: isBatchMode ? () => _handleBatchSelection() : () => _onTap(context),
       onLongPressStart: isBatchMode ? null : (details) => _onLongPressStart(details, context),
       child: Container(
-        color: Theme.of(context).colorScheme.surface,
-        padding: const .symmetric(horizontal: 16, vertical: 12),
+        color: appTheme.settingBg,
+        padding: const .symmetric(horizontal: 12, vertical: 12),
         child: Row(
           crossAxisAlignment: .center,
           children: [

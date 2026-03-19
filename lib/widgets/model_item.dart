@@ -1,10 +1,12 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:io';
 
-import 'package:adaptive_dialog/adaptive_dialog.dart';
+// Flutter imports:
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:adaptive_dialog/adaptive_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
@@ -12,24 +14,29 @@ import 'package:halo_state/halo_state.dart';
 import 'package:rwkv_downloader/downloader.dart' show TaskState;
 import 'package:rwkv_mobile_flutter/rwkv.dart';
 import 'package:sprintf/sprintf.dart';
+
+// Project imports:
 import 'package:zone/func/extensions/num.dart';
-import 'package:zone/func/gb_display.dart';
+import 'package:zone/func/format_bytes.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/file_info.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/router/router.dart';
 import 'package:zone/store/albatross.dart';
 import 'package:zone/store/p.dart';
+import 'package:zone/widgets/loading_progress_button_content.dart';
 import 'package:zone/widgets/model_tag.dart';
 
 class ModelItem extends ConsumerWidget {
   final FileInfo fileInfo;
-  final bool showTags;
-  final bool loadButtonTextShowLoad;
+  final String? dimInfo;
+
   final VoidCallback? onLoadModelTap;
-  final bool showLoadModel;
-  final bool showDelete;
   final bool isCurrentModel;
+  final bool loadButtonTextShowLoad;
+  final bool showDelete;
+  final bool showLoadModel;
+  final bool showTags;
 
   const ModelItem(
     this.fileInfo,
@@ -40,14 +47,15 @@ class ModelItem extends ConsumerWidget {
     this.showDelete = true,
     this.isCurrentModel = false,
     this.loadButtonTextShowLoad = false,
+    this.dimInfo,
   });
 
   void _onStartTap() async {
+    qq;
     if (onLoadModelTap != null) {
       onLoadModelTap!();
       return;
     }
-    qq;
 
     switch (P.app.demoType.q) {
       case .sudoku:
@@ -188,18 +196,25 @@ class ModelItem extends ConsumerWidget {
     final currentModel = ref.watch(P.rwkv.latestModel);
     final isCurrentModel = this.isCurrentModel || currentModel == fileInfo;
     final loadingStatus = ref.watch(P.rwkv.loadingStatus);
+    final loadingProgress = ref.watch(P.rwkv.loadingProgress);
 
     final loading =
         loadingStatus[fileInfo] == .loading ||
         loadingStatus[fileInfo] == .loadModelWithExtra ||
         loadingStatus[fileInfo] == .setQnnLibraryPath;
+    final modelLoadingProgress = loadingProgress[fileInfo];
 
     final demoType = ref.watch(P.app.demoType);
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
+    final startButtonRadius = appTheme.startButtonRadius;
 
     String startTitle;
 
     final isTranslate = fileInfo.tags.contains("translate");
+
+    final osVersionNumbers = ref.watch(P.app.osVersionNumbers);
+    final isIOS17OrEarlier = osVersionNumbers.isNotEmpty && osVersionNumbers.first <= 17 && Platform.isIOS;
+    final isCoreML = fileInfo.tags.contains("coreml");
 
     switch (demoType) {
       case .fifthteenPuzzle:
@@ -212,67 +227,97 @@ class ModelItem extends ConsumerWidget {
         startTitle = isTranslate ? s.use_it_now : s.start_to_chat;
     }
 
-    if (loadButtonTextShowLoad) {
-      startTitle = S.current.load_;
-    }
+    if (loadButtonTextShowLoad) startTitle = S.current.load_;
 
     final unzipping = ref.watch(P.rwkv.unzippingStatus(fileInfo));
-    if (unzipping) {
-      startTitle = s.unzipping;
-    }
+    if (unzipping) startTitle = s.unzipping;
+    final showLoadingProgress = loading && !unzipping;
 
     final qw = ref.watch(P.app.qw);
+    final primary = appTheme.primary;
 
     return ClipRRect(
       borderRadius: .circular(8),
-      child: Container(
-        decoration: BoxDecoration(
-          color: customTheme.settingItem,
-          borderRadius: .circular(8),
-          border: .all(color: qw.q(.1), width: .5),
-        ),
-        margin: const .only(top: 8),
-        padding: const .all(8),
-        child: Row(
-          children: [
-            Expanded(
-              child: FileKeyItem(fileInfo, showTags: showTags),
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: appTheme.settingItem,
+              borderRadius: .circular(8),
+              border: .all(color: qw.q(.1), width: .5),
             ),
-            const SizedBox(width: 8),
-            DownloadActions(file: fileInfo, state: localFile.state),
-            if (hasFile) ...[
-              if (!isCurrentModel && showLoadModel)
-                GestureDetector(
-                  onTap: _onStartTap,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: (loading || unzipping) ? kCG.q(.5) : kCG,
-                      borderRadius: .circular(4),
-                    ),
-                    padding: const .all(8),
-                    child: Text(
-                      loading ? s.loading : startTitle,
-                      style: TS(c: qw),
-                    ),
-                  ),
+            margin: const .only(top: 8),
+            padding: const .all(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _FileKeyItem(fileInfo, showTags: showTags),
                 ),
-              if (isCurrentModel)
-                GestureDetector(
-                  onTap: null,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: kG.q(.5),
-                      borderRadius: .circular(4),
+                const SizedBox(width: 8),
+                DownloadActions(file: fileInfo, state: localFile.state),
+                if (hasFile) ...[
+                  if (!isCurrentModel && showLoadModel)
+                    GestureDetector(
+                      onTap: _onStartTap,
+                      child: AnimatedContainer(
+                        // opacity: loading || unzipping ? 0.6 : 1,
+                        duration: 200.ms,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: loading || unzipping ? appTheme.qb8 : primary,
+                            borderRadius: .circular(startButtonRadius),
+                          ),
+                          padding: const .all(8),
+                          child: showLoadingProgress
+                              ? LoadingProgressButtonContent(
+                                  progress: modelLoadingProgress,
+                                  textStyle: TS(c: qw),
+                                  indicatorColor: qw,
+                                )
+                              : Text(
+                                  startTitle,
+                                  style: TS(c: qw),
+                                ),
+                        ),
+                      ),
                     ),
-                    padding: const .all(8),
-                    child: Text(loadButtonTextShowLoad ? S.current.loaded : s.chatting, style: TS(c: qw)),
-                  ),
+                  if (isCurrentModel)
+                    GestureDetector(
+                      onTap: null,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: appTheme.qb8,
+                          borderRadius: .circular(startButtonRadius),
+                        ),
+                        padding: const .all(8),
+                        child: Text(loadButtonTextShowLoad ? S.current.loaded : s.chatting, style: TS(c: qw)),
+                      ),
+                    ),
+                  if (!isCurrentModel && showDelete) const SizedBox(width: 8),
+                  if (!isCurrentModel && showDelete) _Delete(fileInfo),
+                ],
+              ],
+            ),
+          ),
+          if (isIOS17OrEarlier && isCoreML)
+            Positioned.fill(
+              child: Container(
+                margin: const .only(top: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: .58),
+                  borderRadius: .circular(8),
+                  border: .all(color: kCY.q(1), width: 1),
                 ),
-              if (!isCurrentModel && showDelete) const SizedBox(width: 8),
-              if (!isCurrentModel && showDelete) _Delete(fileInfo),
-            ],
-          ],
-        ),
+                alignment: .center,
+                padding: const .symmetric(horizontal: 16),
+                child: Text(
+                  S.current.model_item_ios18_weight_hint,
+                  textAlign: TextAlign.center,
+                  style: const TS(c: kCY, s: 13, w: .w600, height: 1.3),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -385,12 +430,11 @@ class _Delete extends ConsumerWidget {
   }
 }
 
-class FileKeyItem extends ConsumerWidget {
+class _FileKeyItem extends ConsumerWidget {
   final FileInfo fileInfo;
-  final bool showDownloaded;
   final bool showTags;
 
-  const FileKeyItem(this.fileInfo, {super.key, this.showDownloaded = false, this.showTags = true});
+  const _FileKeyItem(this.fileInfo, {this.showTags = true});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -402,7 +446,6 @@ class FileKeyItem extends ConsumerWidget {
     double networkSpeed = localFile.networkSpeed.clamp(0, 99999999).toDouble();
     Duration timeRemaining = localFile.timeRemaining;
     if (timeRemaining.isNegative) timeRemaining = Duration.zero;
-    final primary = Theme.of(getContext()!).colorScheme.primary;
     final qb = ref.watch(P.app.qb);
 
     final remainText = timeRemaining.inMinutes == 0
@@ -410,6 +453,8 @@ class FileKeyItem extends ConsumerWidget {
         : '${timeRemaining.inMinutes}m${timeRemaining.inSeconds % 60}s';
 
     final monospaceFF = ref.watch(P.font.finalMonospaceFontFamily);
+
+    final appTheme = ref.watch(P.app.theme);
 
     return Column(
       crossAxisAlignment: .start,
@@ -424,15 +469,9 @@ class FileKeyItem extends ConsumerWidget {
               style: const TS(w: .w600),
             ),
             Text(
-              gbDisplay(fileSize),
+              formatBytes(fileSize),
               style: TS(c: qb.q(.7), w: .w500),
             ),
-            if (showDownloaded && localFile.hasFile)
-              Icon(
-                Icons.download_done,
-                color: primary,
-                size: 20,
-              ),
           ],
         ),
         if (showTags) const SizedBox(height: 4),
@@ -444,6 +483,8 @@ class FileKeyItem extends ConsumerWidget {
             child: LinearProgressIndicator(
               value: (progress.isNaN || progress <= 0 || progress.isInfinite) ? null : progress,
               borderRadius: .circular(8),
+              backgroundColor: appTheme.qb11,
+              color: appTheme.qb5,
             ),
           ),
         if (downloading) const SizedBox(height: 4),
@@ -487,7 +528,8 @@ class _Tags extends ConsumerWidget {
     return Wrap(
       spacing: 4,
       runSpacing: 8,
-      children: [
+      children: <ModelTag>[
+        if (fileInfo.backend == .webRwkv) const ModelTag(tag: "GPU"),
         ...tags.where((tag) => !hiddenTags.contains(tag)).map((tag) => ModelTag(tag: tag)),
         if (kDebugMode && fileInfo.isDebug) const ModelTag(tag: "DEBUG", forceBgColor: Colors.red, forceTextColor: kW),
         if (quantization != null && quantization.isNotEmpty) ModelTag(tag: quantization, forceUppercase: true),

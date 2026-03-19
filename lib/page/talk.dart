@@ -1,56 +1,44 @@
-// ignore: unused_import
-import 'dart:developer';
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
 import 'package:zone/gen/assets.gen.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/store/p.dart';
-import 'package:zone/widgets/gradient_background.dart';
 import 'package:zone/widgets/chat_app_bar.dart';
-import 'package:zone/widgets/talk/audio_input.dart';
 import 'package:zone/widgets/input_bar.dart';
 import 'package:zone/widgets/message.dart';
-import 'package:zone/widgets/talk/suggestions.dart';
 import 'package:zone/widgets/model_selector.dart';
+import 'package:zone/widgets/talk/suggestions.dart';
 
 class PageTalk extends ConsumerWidget {
   const PageTalk({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const Scaffold(
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: () {
-      //     P.tts.test();
-      //   },
-      // ),
+    final inputHeight = ref.watch(P.chat.inputHeight);
+    return Scaffold(
       body: Stack(
         children: [
-          GradientBackground(child: SizedBox()),
-          _List(),
-          _Empty(),
-          Positioned(
+          const _List(),
+          const _Empty(),
+          const Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: ChatAppBar(preferredDemoType: .tts),
           ),
           Positioned(
-            bottom: 0,
+            bottom: inputHeight + 8,
             right: 0,
             left: 0,
-            child: Column(
-              crossAxisAlignment: .stretch,
-              mainAxisSize: .min,
-              children: [
-                Suggestions(),
-                InputBar(preferredDemoType: .tts),
-              ],
-            ),
+            child: const Suggestions(),
           ),
-          AudioInput(demoType: .tts),
+          const InputBar(preferredDemoType: .tts),
         ],
       ),
     );

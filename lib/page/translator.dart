@@ -1,8 +1,14 @@
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Flutter imports:
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+// Package imports:
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/backend_state.dart';
 import 'package:zone/model/browser_tab.dart';
@@ -241,7 +247,7 @@ class _ResultState extends ConsumerState<_Result> {
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.copy_all_outlined, size: 20),
+                icon: const Icon(Symbols.content_copy, size: 20),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: P.translator.resultTextEditingController.text));
                   ScaffoldMessenger.of(context).showSnackBar(

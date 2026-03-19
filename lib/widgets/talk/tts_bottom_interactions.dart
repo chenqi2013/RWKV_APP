@@ -1,28 +1,28 @@
-// ignore: unused_import
-import 'dart:developer';
-import 'dart:io';
-
-import 'package:collection/collection.dart';
-import 'package:flutter/cupertino.dart';
+// Flutter imports:
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+// Package imports:
+import 'package:collection/collection.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:halo/halo.dart';
+import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:path/path.dart' as path;
+
+// Project imports:
 import 'package:zone/func/check_model_selection.dart';
 import 'package:zone/func/extensions/num.dart';
 import 'package:zone/gen/l10n.dart';
-import 'package:halo_alert/halo_alert.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:halo/halo.dart';
 import 'package:zone/model/demo_type.dart';
 import 'package:zone/model/language.dart';
 import 'package:zone/model/tts_instruction.dart';
-import 'package:path/path.dart' as path;
 import 'package:zone/store/p.dart';
-import 'package:file_picker/file_picker.dart';
 
-class TTSBottomInteractions extends ConsumerWidget {
-  const TTSBottomInteractions({super.key});
+class TTSInteractions extends ConsumerWidget {
+  const TTSInteractions({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,6 +36,7 @@ class TTSBottomInteractions extends ConsumerWidget {
     final selectSourceAudioPath = ref.watch(P.talk.selectSourceAudioPath);
     final sourceWavName = selectSourceAudioPath != null ? path.basename(selectSourceAudioPath) : null;
     final pairs = ref.watch(P.talk.spkPairs);
+    final paddingBottom = ref.watch(P.app.paddingBottom);
 
     String target = "";
 
@@ -49,6 +50,7 @@ class TTSBottomInteractions extends ConsumerWidget {
     return GestureDetector(
       onTap: P.talk.dismissAllShown,
       child: Container(
+        padding: .only(bottom: paddingBottom, left: 12, right: 12),
         decoration: const BoxDecoration(color: Colors.transparent),
         child: Column(
           crossAxisAlignment: .stretch,
@@ -73,8 +75,6 @@ class TTSBottomInteractions extends ConsumerWidget {
             if (audioInteractorShown) const _AudioInteractor(),
             if (spkShown) const _SpkPanel(),
             if (intonationShown) const _IntonationPanel(),
-            if (!audioInteractorShown && !intonationShown && !spkShown && selectedSpkName == null)
-              const _Instruction(preferredDemoType: .tts),
           ],
         ),
       ),
@@ -232,7 +232,7 @@ class _AudioButton extends ConsumerWidget {
     final s = S.of(context);
     final qw = ref.watch(P.app.qw);
     final primary = Theme.of(context).colorScheme.primary;
-    const DemoType demoType = .tts;
+    const demoType = DemoType.tts;
     final borderRadius = demoType != .tts ? 12.r : 6.r;
     final audioInteractorShown = ref.watch(P.talk.audioInteractorShown);
     return GestureDetector(
@@ -263,7 +263,7 @@ class _SpkButton extends ConsumerWidget {
     final s = S.of(context);
     final qw = ref.watch(P.app.qw);
     final primary = Theme.of(context).colorScheme.primary;
-    const DemoType demoType = .tts;
+    const demoType = DemoType.tts;
     final borderRadius = demoType != .tts ? 12.r : 6.r;
     ref.watch(P.talk.intonationShown);
     ref.watch(P.talk.audioInteractorShown);
@@ -296,7 +296,7 @@ class _IntonationButton extends ConsumerWidget {
     final qw = ref.watch(P.app.qw);
     final s = S.of(context);
     final primary = Theme.of(context).colorScheme.primary;
-    const DemoType demoType = .tts;
+    const demoType = DemoType.tts;
     final borderRadius = demoType != .tts ? 12.r : 6.r;
     final intonationShown = ref.watch(P.talk.intonationShown);
     return GestureDetector(
@@ -324,86 +324,14 @@ class _Actions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final generating = ref.watch(P.talk.generating);
-    final canSend = ref.watch(P.chat.inputHasContent);
-    final editingBotMessage = ref.watch(P.msg.editingBotMessage);
-    final color = Theme.of(context).colorScheme.primary;
-    final loaded = ref.watch(P.rwkv.loaded);
-
-    return Row(
+    return const Wrap(
+      crossAxisAlignment: .center,
       children: [
-        const Expanded(
-          child: Wrap(
-            crossAxisAlignment: .center,
-            children: [
-              _AudioButton(),
-              _SpkButton(),
-              _IntonationButton(),
-            ],
-          ),
-        ),
-        if (generating)
-          Container(
-            decoration: const BoxDecoration(color: Colors.transparent),
-            child: Stack(
-              children: [
-                SizedBox(
-                  width: 46,
-                  height: 34,
-                  child: Center(
-                    child: Container(
-                      decoration: BoxDecoration(color: Colors.transparent, borderRadius: 2.r),
-                      width: 12,
-                      height: 12,
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: 46,
-                  height: 34,
-                  child: Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        color: color.q(.5),
-                        strokeWidth: 3,
-                        strokeCap: StrokeCap.round,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (!generating)
-          AnimatedOpacity(
-            opacity: (canSend && loaded) ? 1 : .333,
-            duration: 250.ms,
-            child: GestureDetector(
-              onTap: _onRightButtonPressed,
-              child: Container(
-                padding: const .symmetric(horizontal: 10, vertical: 5),
-                child: Icon(
-                  (Platform.isIOS || Platform.isMacOS)
-                      ? editingBotMessage
-                            ? CupertinoIcons.pencil_circle_fill
-                            : CupertinoIcons.arrow_up_circle_fill
-                      : editingBotMessage
-                      ? Icons.edit
-                      : Icons.send,
-                  color: color,
-                ),
-              ),
-            ),
-          ),
+        _AudioButton(),
+        _SpkButton(),
+        _IntonationButton(),
       ],
     );
-  }
-
-  void _onRightButtonPressed() async {
-    qq;
-    await P.talk.gen();
   }
 }
 
@@ -559,6 +487,7 @@ class _SpkPanel extends ConsumerWidget {
   }
 }
 
+// ignore: unused_element
 class _Instruction extends ConsumerWidget {
   final DemoType preferredDemoType;
   const _Instruction({required this.preferredDemoType});

@@ -1,14 +1,20 @@
+// Dart imports:
 import 'dart:io';
 
-import 'package:equatable/equatable.dart';
+// Flutter imports:
 import 'package:flutter/foundation.dart';
+
+// Package imports:
+import 'package:equatable/equatable.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:path/path.dart' as p;
 import 'package:rwkv_mobile_flutter/rwkv.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/model/file_download_source.dart';
 import 'package:zone/model/world_type.dart';
-import 'package:path/path.dart' as p;
 import 'package:zone/store/p.dart';
 
 @immutable
@@ -147,7 +153,7 @@ class FileInfo extends Equatable {
     final platforms = supportedPlatforms;
     if (Platform.isAndroid) return platforms.contains('android');
     if (Platform.isIOS) return platforms.contains('ios');
-    if (Platform.isMacOS) return platforms.contains('macos');
+    if (Platform.isMacOS) return platforms.contains('macos') || (kDebugMode && platforms.contains('macos_debug'));
     if (Platform.isLinux) return platforms.contains('linux');
     if (Platform.isWindows) return platforms.contains('windows');
     if (Platform.isFuchsia) return platforms.contains('fuchsia');

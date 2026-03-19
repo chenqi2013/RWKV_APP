@@ -27,11 +27,6 @@ class _Remote {
   /// 模型目录下所有文件的总大小
   late final totalSizeInModelsDir = qs(0);
 
-  late final totalSizeInModelsDirDisplay = qp<String>((ref) {
-    final totalSize = ref.watch(P.remote.totalSizeInModelsDir);
-    return formatBytes(totalSize);
-  });
-
   /// 本地文件状态
   late final locals = qsff<FileInfo, LocalFile>((ref, key) {
     return LocalFile(targetPath: ref.watch(_paths(key)));
@@ -72,11 +67,44 @@ class _Remote {
   /// Unrecognized files found in the models directory
   late final unrecognizedFiles = qs<List<UnrecognizedFile>>([]);
 
+  /// MLX/CoreML unzip cache directories found in the models directory
+  late final mlxCacheDirectories = qs<List<MlxCacheDirectory>>([]);
+
   /// Check if using custom models directory
   late final usingCustomModelsDir = qp<bool>((ref) {
     final customDir = ref.watch(P.preference.customModelsDir);
     final defaultDir = defaultModelsDir.q;
     return customDir != null && customDir.isNotEmpty && customDir != defaultDir;
+  });
+
+  late final allWeights = qp<Set<FileInfo>>((ref) {
+    final groups = <Set<FileInfo>>[
+      ref.watch(chatWeights),
+      ref.watch(roleplayWeights),
+      ref.watch(ttsWeights),
+      ref.watch(seeWeights),
+      ref.watch(sudokuWeights),
+      ref.watch(othelloWeights),
+    ];
+    final result = <FileInfo>{};
+    for (final group in groups) {
+      for (final fileInfo in group) {
+        result.add(fileInfo);
+        result.addAll(fileInfo.state);
+      }
+    }
+    return result;
+  });
+
+  late final hasActiveDownload = qp<bool>((ref) {
+    final allWeights = ref.watch(this.allWeights);
+    for (final fileInfo in allWeights) {
+      final localFile = ref.watch(locals(fileInfo));
+      if (localFile.downloading) {
+        return true;
+      }
+    }
+    return false;
   });
 
   /// 量化好的权重被保存的文件夹位置
@@ -173,6 +201,30 @@ class _Remote {
 
 /// Public methods
 extension $Remote on _Remote {
+  Future<String?> _getModelsDirPathForScan() async {
+    final isDesktop = P.app.isDesktop.q;
+    if (isDesktop) {
+      return P.remote.effectiveModelsDir.q;
+    }
+
+    final documentsDir = P.app.documentsDir.q?.path;
+    if (documentsDir == null) {
+      Sentry.captureException(Exception("documentsDir is null, WTF?"), stackTrace: StackTrace.current);
+      return null;
+    }
+
+    final oldModelsDirPathInMobile = join(documentsDir, Config.desktopModelsDirName);
+    final oldModelsDirPathInMobileExists = await Directory(oldModelsDirPathInMobile).exists();
+    if (oldModelsDirPathInMobileExists) {
+      qqw("Old models directory exists in mobile: $oldModelsDirPathInMobile");
+      qqw("Transferring files from old models directory to new models directory...");
+    }
+
+    final targetDirPath = join(documentsDir, Config.mobileModelsDirName);
+    await transferAllFilesInDir(oldModelsDirPathInMobile, targetDirPath);
+    return targetDirPath;
+  }
+
   Future<void> syncAvailableModels() async {
     qq;
     final config = P.app._config.q;
@@ -1236,6 +1288,9 @@ extension $Remote on _Remote {
     // If there are existing files, ask user for confirmation
     bool shouldOverwrite = false;
     if (hasExistingFiles) {
+      if (!context.mounted) {
+        return (0, 0, <String>[]);
+      }
       final s = S.current;
       final existingCount = fileInfos.where((info) => info.existingFileInfo != null && info.error == null).length;
       final message = existingCount == 1
@@ -1262,8 +1317,7 @@ extension $Remote on _Remote {
     final List<String> failedFiles = [];
 
     // Process each file
-    for (var i = 0; i < fileInfos.length; i++) {
-      final fileInfo = fileInfos[i];
+    for (final fileInfo in fileInfos) {
       final pickedFile = fileInfo.pickedFile;
       final fileName = pickedFile.name;
 
@@ -1433,26 +1487,9 @@ extension $Remote on _Remote {
 
   /// 获取 /models 目录下未, 未记录至 latest.json 的文件
   Future<List<UnrecognizedFile>> getUnrecognizedFiles() async {
-    final isDesktop = P.app.isDesktop.q;
-
-    late final String targetDirPath;
-    if (isDesktop) {
-      targetDirPath = P.remote.effectiveModelsDir.q;
-    } else {
-      final documentsDir = P.app.documentsDir.q?.path;
-      if (documentsDir == null) {
-        Sentry.captureException(Exception("documentsDir is null, WTF?"), stackTrace: StackTrace.current);
-        return [];
-      }
-
-      final oldModelsDirPathInMobile = join(documentsDir, Config.desktopModelsDirName);
-      final oldModelsDirPathInMobileExists = await Directory(oldModelsDirPathInMobile).exists();
-      if (oldModelsDirPathInMobileExists) {
-        qqw("Old models directory exists in mobile: $oldModelsDirPathInMobile");
-        qqw("Transferring files from old models directory to new models directory...");
-      }
-      targetDirPath = join(documentsDir, Config.mobileModelsDirName);
-      await transferAllFilesInDir(oldModelsDirPathInMobile, targetDirPath);
+    final targetDirPath = await _getModelsDirPathForScan();
+    if (targetDirPath == null) {
+      return [];
     }
 
     final directory = Directory(targetDirPath);
@@ -1482,30 +1519,59 @@ extension $Remote on _Remote {
       downloadingTmpPaths.add("${local.targetPath}.tmp");
     }
 
+    final currentConfigInPlaceCacheDirNames = _getCurrentConfigInPlaceCacheDirNames();
+    final shouldDetectInPlaceCacheDirs = Platform.isIOS || Platform.isMacOS;
     final unrecognizedFiles = <UnrecognizedFile>[];
 
     try {
       final entities = directory.listSync();
       for (final entity in entities) {
-        if (entity is! File) continue;
+        if (entity is File) {
+          final filePath = entity.path;
 
-        final filePath = entity.path;
+          // Skip files that are temporary files of active download tasks
+          if (downloadingTmpPaths.contains(filePath)) {
+            continue;
+          }
 
-        // Skip files that are temporary files of active download tasks
-        if (downloadingTmpPaths.contains(filePath)) {
+          final fileName = basename(filePath);
+          if (allWeightFileNames.contains(fileName)) continue;
+
+          final fileSize = await entity.length();
+
+          unrecognizedFiles.add(
+            UnrecognizedFile(
+              fileName: fileName,
+              filePath: filePath,
+              fileSize: fileSize,
+              isDirectory: false,
+            ),
+          );
           continue;
         }
-
-        final fileName = basename(filePath);
-        if (allWeightFileNames.contains(fileName)) continue;
-
-        final fileSize = await entity.length();
+        if (entity is! Directory) {
+          continue;
+        }
+        if (!shouldDetectInPlaceCacheDirs) {
+          continue;
+        }
+        final dirName = basename(entity.path);
+        final dirNameLower = dirName.toLowerCase();
+        final looksLikeInPlaceCache = dirNameLower.contains("-mlx-") || dirNameLower.contains("-coreml-");
+        if (!looksLikeInPlaceCache) {
+          continue;
+        }
+        if (currentConfigInPlaceCacheDirNames.contains(dirName)) {
+          continue;
+        }
+        final directorySize = await calculateTotalSizeOfDir(entity.path);
 
         unrecognizedFiles.add(
           UnrecognizedFile(
-            fileName: fileName,
-            filePath: filePath,
-            fileSize: fileSize,
+            fileName: dirName,
+            filePath: entity.path,
+            fileSize: directorySize,
+            isDirectory: true,
           ),
         );
       }
@@ -1516,18 +1582,90 @@ extension $Remote on _Remote {
     return unrecognizedFiles;
   }
 
+  /// 获取 /models 目录中由 MLX/CoreML zip 解压产生的缓存目录
+  Future<List<MlxCacheDirectory>> getMlxCacheDirectories() async {
+    final shouldDetectInPlaceCacheDirs = Platform.isIOS || Platform.isMacOS;
+    if (!shouldDetectInPlaceCacheDirs) {
+      return [];
+    }
+
+    final targetDirPath = await _getModelsDirPathForScan();
+    if (targetDirPath == null) {
+      return [];
+    }
+
+    final directory = Directory(targetDirPath);
+    if (!await directory.exists()) {
+      Sentry.captureException(Exception("directory not found: $targetDirPath"), stackTrace: StackTrace.current);
+      return [];
+    }
+
+    final mlxCacheDirNames = _getCurrentConfigInPlaceCacheDirNames();
+    if (mlxCacheDirNames.isEmpty) {
+      return [];
+    }
+
+    final caches = <MlxCacheDirectory>[];
+    try {
+      final entities = directory.listSync();
+      for (final entity in entities) {
+        if (entity is! Directory) {
+          continue;
+        }
+        final dirName = basename(entity.path);
+        if (!mlxCacheDirNames.contains(dirName)) {
+          continue;
+        }
+
+        final directorySize = await calculateTotalSizeOfDir(entity.path);
+        caches.add(
+          MlxCacheDirectory(
+            directoryName: dirName,
+            directoryPath: entity.path,
+            directorySize: directorySize,
+          ),
+        );
+      }
+    } catch (_) {
+      return [];
+    }
+
+    caches.sort((MlxCacheDirectory a, MlxCacheDirectory b) => b.directorySize.compareTo(a.directorySize));
+    return caches;
+  }
+
   /// Refresh unrecognized files and store into state
   Future<void> refreshUnrecognizedFiles() async {
     final files = await getUnrecognizedFiles();
     unrecognizedFiles.q = files;
   }
 
+  /// Refresh MLX cache directories and store into state
+  Future<void> refreshMlxCacheDirectories() async {
+    final directories = await getMlxCacheDirectories();
+    mlxCacheDirectories.q = directories;
+  }
+
   /// Delete an unrecognized file
   Future<void> deleteUnrecognizedFile(UnrecognizedFile file) async {
     try {
+      if (file.isDirectory) {
+        await Directory(file.filePath).delete(recursive: true);
+        return;
+      }
       await File(file.filePath).delete();
     } catch (e) {
       qqe("Failed to delete file: $e");
+      rethrow;
+    }
+  }
+
+  /// Delete an MLX cache directory
+  Future<void> deleteMlxCacheDirectory(MlxCacheDirectory directory) async {
+    try {
+      await Directory(directory.directoryPath).delete(recursive: true);
+    } catch (e) {
+      qqe("Failed to delete MLX cache directory: $e");
       rethrow;
     }
   }
@@ -1581,10 +1719,36 @@ extension $Remote on _Remote {
       400.msLater,
       checkLocal(),
       refreshUnrecognizedFiles(),
+      refreshMlxCacheDirectories(),
     ]);
     await calculateTotalSizeOfDir(effectiveModelsDir.q);
     syncingLocalFiles.q = false;
   }
+}
+
+Set<String> _getCurrentConfigInPlaceCacheDirNames() {
+  final allWeights = <FileInfo>[
+    ...P.remote.chatWeights.q,
+    ...P.remote.roleplayWeights.q,
+    ...P.remote.ttsWeights.q,
+    ...P.remote.seeWeights.q,
+    ...P.remote.sudokuWeights.q,
+    ...P.remote.othelloWeights.q,
+  ];
+
+  final dirNames = <String>{};
+  for (final fileInfo in allWeights) {
+    final backend = fileInfo.backend;
+    if (backend != Backend.mlx && backend != Backend.coreml) {
+      continue;
+    }
+    final dirName = basenameWithoutExtension(fileInfo.fileName);
+    if (dirName.isEmpty) {
+      continue;
+    }
+    dirNames.add(dirName);
+  }
+  return dirNames;
 }
 
 /// Private methods
@@ -1611,9 +1775,14 @@ extension _$Remote on _Remote {
     }
 
     P.app.pageKey.lb(_onPageKeyChanged);
+    hasActiveDownload.l(_onHasActiveDownloadChanged, fireImmediately: true);
 
     await _transferAllFilesFromOldModelsDirToNewModelsDirIfNeeded();
     sync();
+  }
+
+  void _onHasActiveDownloadChanged(bool hasActiveDownload) {
+    P.app.setKeepScreenAwakeForReason(reason: .download, enabled: hasActiveDownload);
   }
 
   void _onPageKeyChanged(PageKey? previous, PageKey next) async {
@@ -1836,15 +2005,30 @@ extension _$Remote on _Remote {
 }
 
 /// Represents an unrecognized file in the models directory
+class MlxCacheDirectory {
+  final String directoryName;
+  final String directoryPath;
+  final int directorySize;
+
+  const MlxCacheDirectory({
+    required this.directoryName,
+    required this.directoryPath,
+    required this.directorySize,
+  });
+}
+
+/// Represents an unrecognized file in the models directory
 class UnrecognizedFile {
   final String fileName;
   final String filePath;
   final int fileSize;
+  final bool isDirectory;
 
   const UnrecognizedFile({
     required this.fileName,
     required this.filePath,
     required this.fileSize,
+    this.isDirectory = false,
   });
 }
 

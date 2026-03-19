@@ -1,18 +1,26 @@
-// ignore: unused_import
+// Dart imports:
+import 'dart:ui';
 
-import 'package:adaptive_dialog/adaptive_dialog.dart';
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:adaptive_dialog/adaptive_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+// Project imports:
 import 'package:zone/func/check_model_selection.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/decode_param_type.dart';
 import 'package:zone/router/router.dart';
 import 'package:zone/store/p.dart';
 import 'package:zone/widgets/arguments_panel.dart';
-import 'package:zone/widgets/bottom_interactions.dart';
+import 'package:zone/widgets/chat/interaction_visual_state.dart';
+import 'package:zone/widgets/input_interactions.dart';
 
 class DecodeParamButton extends ConsumerWidget {
   const DecodeParamButton({super.key});
@@ -34,11 +42,11 @@ class DecodeParamButton extends ConsumerWidget {
 
     qqr(current);
 
-    final List<({String label, DecodeParamType key})> actionPairs = [
+    final actionPairs = <({String label, DecodeParamType key})>[
       (label: s.decode_param_custom, key: .custom),
       (label: s.decode_param_default_, key: .defaults),
-      (label: s.decode_param_comprehensive, key: .comprehensive),
       (label: s.decode_param_creative, key: .creative),
+      (label: s.decode_param_comprehensive, key: .comprehensive),
       (label: s.decode_param_conservative, key: .conservative),
       (label: s.decode_param_fixed, key: .fixed),
     ];
@@ -70,37 +78,70 @@ class DecodeParamButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final qb = ref.watch(P.app.qb);
-    final height = BottomInteractions.calculateButtonHeight(context);
+    final theme = Theme.of(context);
+    final fontSize = theme.textTheme.bodyMedium?.fontSize ?? 14;
+    final appTheme = ref.watch(P.app.theme);
+    final height = InputInteractions.calculateButtonHeight(context);
+    final loading = ref.watch(P.rwkv.loading);
+    final generating = ref.watch(P.rwkv.generating);
+    final loaded = ref.watch(P.rwkv.loaded);
     final decodeParamType = ref.watch(P.rwkv.decodeParamType);
-    final surfaceContainer = Theme.of(context).colorScheme.surfaceContainer;
-    final primary = Theme.of(context).colorScheme.primary;
-    final bgColor = surfaceContainer;
-    final textColor = qb.q(.667);
-    final borderColor = primary.q(.1);
+    final canEnable = loaded && !loading && !generating;
+    final interactionState = canEnable ? InteractionVisualState.available : InteractionVisualState.unavailable;
+    final colors = interactionVisualColors(appTheme: appTheme, state: interactionState);
+    final bgColor = colors.background;
+    final textColor = colors.foreground;
+    final borderColor = colors.border;
+    final userBackdropFilterForInputOptions = ref.watch(P.ui.useBackdropFilterForInputOptions);
+    final backdropFilterBgAlphaForInputOptions = ref.watch(P.ui.backdropFilterBgAlphaForInputOptions);
+    final backdropFilterBgAlphaForInputOptionsDarkModifier = ref.watch(P.ui.backdropFilterBgAlphaForInputOptionsDarkModifier);
+    final sigmaForBackdropFilterForInputOptions = ref.watch(P.ui.sigmaForBackdropFilterForInputOptions);
     final s = S.of(context);
+
     return Tooltip(
       message: s.decode_param,
       child: IntrinsicWidth(
         child: GestureDetector(
           onTap: _onTap,
-          child: Container(
-            height: height,
-            padding: const .symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: .circular(60),
-              border: .all(color: borderColor),
-            ),
-            child: Row(
-              mainAxisAlignment: .center,
-              crossAxisAlignment: .center,
-              children: [
-                Text(
-                  s.style + s.hyphen + decodeParamType.displayNameShort,
-                  style: TS(c: textColor, s: 14, height: 1, w: .w500),
+          child: ClipRRect(
+            borderRadius: .circular(60),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(
+                sigmaX: sigmaForBackdropFilterForInputOptions.toDouble(),
+                sigmaY: sigmaForBackdropFilterForInputOptions.toDouble(),
+              ),
+              enabled: userBackdropFilterForInputOptions,
+              child: Container(
+                height: height,
+                padding: const .symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: bgColor.q(
+                    userBackdropFilterForInputOptions
+                        ? backdropFilterBgAlphaForInputOptions * backdropFilterBgAlphaForInputOptionsDarkModifier
+                        : 1,
+                  ),
+                  borderRadius: .circular(60),
+                  border: .all(color: borderColor),
                 ),
-              ],
+                child: Row(
+                  mainAxisAlignment: .center,
+                  crossAxisAlignment: .center,
+                  children: [
+                    Icon(Symbols.auto_awesome, color: textColor, size: appTheme.inputBarInteractionsIconSize),
+                    const SizedBox(width: 4),
+                    Text(
+                      decodeParamType.displayNameShort,
+                      style: TS(c: textColor, s: fontSize, height: 1, w: .w500),
+                      strutStyle: StrutStyle(
+                        fontSize: fontSize,
+                        height: 1,
+                        forceStrutHeight: true,
+                        leadingDistribution: TextLeadingDistribution.even,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

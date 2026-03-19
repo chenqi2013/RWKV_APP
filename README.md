@@ -95,6 +95,8 @@ When you first open the app, a model selection panel will appear. Please choose 
 
 **Ensure you have the [Flutter](https://flutter.dev/) development environment set up.**
 
+> Development requires **Flutter 3.41.1+** (stable channel recommended).
+
 1. **Clone the repository:**
 
 ```bash
@@ -119,7 +121,7 @@ flutter pub get
 
 4. **(Optional) Install dependencies for the `tools` directory:**
 
-*Doing this avoids the “Errors exist in your project” warning in VS Code and Cursor when you run the app.*
+_Doing this avoids the “Errors exist in your project” warning in VS Code and Cursor when you run the app._
 
 ```bash
 cd tools; flutter pub get; cd ..;
@@ -130,6 +132,17 @@ cd tools; flutter pub get; cd ..;
 ```bash
 flutter run
 ```
+
+#### Windows ARM64 Debug (QNN)
+
+If you are debugging on Windows ARM64, uncomment the following section in `pubspec.yaml`:
+
+```yaml
+- path: assets/lib/qnn-windows/
+  platforms: [windows]
+```
+
+For Windows ARM64 debugging, check out Flutter's `master` branch instead of the `stable` branch.
 
 ## 🛠️ Technical Highlights
 
@@ -152,6 +165,7 @@ This is an **experimental early-stage version**, and your feedback is crucial to
 
 - 🐞 **Found a bug or issue?** [Report it here!](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D)
 - 💡 **Have a suggestion?** [Suggest a feature!](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)
+- 🎨 **Want to contribute a custom theme?** [Theme quick start](CONTRIBUTING.md)
 
 ## 📄 License
 

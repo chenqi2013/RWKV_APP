@@ -95,6 +95,8 @@ RWKV App は、マルチターン会話、テキスト読み上げ（TTS）、�
 
 **[Flutter](https://flutter.dev/)開発環境がセットアップされていることを確認してください。**
 
+> 開発環境では **Flutter 3.41.1+** が必要です（stable channel 推奨）。
+
 1. **リポジトリをクローン:**
 
 ```bash
@@ -119,7 +121,7 @@ flutter pub get
 
 4. **（任意）`tools` ディレクトリの依存関係をインストール:**
 
-*この手順を実行すると、VS Code や Cursor でアプリを実行した際に「プロジェクトにエラーが存在します」という警告を避けられます。*
+_この手順を実行すると、VS Code や Cursor でアプリを実行した際に「プロジェクトにエラーが存在します」という警告を避けられます。_
 
 ```bash
 cd tools; flutter pub get; cd ..;
@@ -130,6 +132,17 @@ cd tools; flutter pub get; cd ..;
 ```bash
 flutter run
 ```
+
+#### Windows ARM64 デバッグ（QNN）
+
+Windows ARM64 でデバッグする場合は、`pubspec.yaml` の次の設定をアンコメントしてください。
+
+```yaml
+- path: assets/lib/qnn-windows/
+  platforms: [windows]
+```
+
+Windows ARM64 でデバッグする場合は、Flutter の `stable` ブランチではなく `master` ブランチを使用してください。
 
 ## 🛠️ 技術的ハイライト
 
@@ -152,6 +165,7 @@ flutter run
 
 - 🐞 **バグや問題を見つけましたか？** [ここで報告してください！](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D)
 - 💡 **提案がありますか？** [機能を提案してください！](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)
+- 🎨 **カスタムテーマを貢献したいですか？** [Theme クイックスタート](CONTRIBUTING.ja.md)
 
 ## 📄 ライセンス
 

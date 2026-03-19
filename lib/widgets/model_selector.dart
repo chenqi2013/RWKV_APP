@@ -1,12 +1,20 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
+import 'dart:io';
 
-import 'package:collection/collection.dart';
+// Flutter imports:
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:path/path.dart' as path;
+import 'package:rwkv_mobile_flutter/rwkv.dart';
+
+// Project imports:
+import 'package:zone/func/format_bytes.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/demo_type.dart';
 import 'package:zone/model/file_download_source.dart';
@@ -16,11 +24,7 @@ import 'package:zone/model/world_type.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/router/router.dart';
 import 'package:zone/store/p.dart';
-import 'dart:io';
-
-import 'package:path/path.dart' as path;
-import 'package:rwkv_mobile_flutter/rwkv.dart';
-import 'package:zone/func/gb_display.dart';
+import 'package:zone/widgets/loading_progress_button_content.dart';
 import 'package:zone/widgets/model_item.dart';
 import 'package:zone/widgets/model_tag.dart';
 import 'package:zone/widgets/role_play_item.dart';
@@ -192,7 +196,7 @@ class _PanelBarState extends ConsumerState<_PanelBar> {
   Widget build(BuildContext context) {
     final qb = ref.watch(P.app.qb);
     final s = S.of(context);
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
 
     return Container(
       constraints: const BoxConstraints(
@@ -200,7 +204,7 @@ class _PanelBarState extends ConsumerState<_PanelBar> {
       ),
       padding: const .only(top: 4),
       decoration: BoxDecoration(
-        color: customTheme.settingItem.q(_opacity * _opacity),
+        color: appTheme.settingItem.q(_opacity * _opacity),
         border: Border(
           bottom: BorderSide(color: qb.q(.2 * _opacity * _opacity), width: 0.5),
         ),
@@ -336,6 +340,10 @@ class _ModelsInConfigFile extends ConsumerWidget {
   ///
   /// 只要没用 CPU 就排前面
   int _compare(FileInfo a, FileInfo b) {
+    final aHasCoreML = a.tags.contains("coreml");
+    final bHasCoreML = b.tags.contains("coreml");
+    if (aHasCoreML != bHasCoreML) return aHasCoreML ? -1 : 1;
+
     final aHasMLX = a.tags.contains("mlx");
     final bHasMLX = b.tags.contains("mlx");
     if (aHasMLX != bHasMLX) return aHasMLX ? -1 : 1;
@@ -514,7 +522,8 @@ class _ModelsInConfigDownloadSource extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentSource = ref.watch(P.remote.downloadSource);
-    final primary = Theme.of(context).colorScheme.primary;
+    final appTheme = ref.watch(P.app.theme);
+    final primary = appTheme.primary;
     final qb = ref.watch(P.app.qb);
     final qw = ref.watch(P.app.qw);
     final currentLangIsZh = ref.watch(P.preference.currentLangIsZh);
@@ -587,17 +596,24 @@ class _LocalPthFileItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
+    ref.watch(P.app.theme);
+    final appTheme = ref.watch(P.app.theme);
     final currentModel = ref.watch(P.rwkv.latestModel);
     final isCurrent = currentModel == fileInfo;
     final loadingStatus = ref.watch(P.rwkv.loadingStatus);
+    final loadingProgress = ref.watch(P.rwkv.loadingProgress);
+
     final loading =
         loadingStatus[fileInfo] == LoadingStatus.loading ||
         loadingStatus[fileInfo] == LoadingStatus.loadModelWithExtra ||
         loadingStatus[fileInfo] == LoadingStatus.setQnnLibraryPath;
-    ref.watch(P.app.customTheme);
+    final modelLoadingProgress = loadingProgress[fileInfo];
+    final showLoadingProgress = loading;
+
     final qb = ref.watch(P.app.qb);
     final qw = ref.watch(P.app.qw);
     final date = fileInfo.dateDisplayString;
+    final primary = appTheme.primary;
 
     return Row(
       children: [
@@ -612,7 +628,7 @@ class _LocalPthFileItem extends ConsumerWidget {
                 children: [
                   Text(fileInfo.name, style: const TS(w: .w600)),
                   Text(
-                    gbDisplay(fileInfo.fileSize),
+                    formatBytes(fileInfo.fileSize),
                     style: TS(c: qb.q(.7), w: .w500),
                   ),
                 ],
@@ -635,22 +651,29 @@ class _LocalPthFileItem extends ConsumerWidget {
             onTap: loading ? null : () => onStartToChat!(),
             child: Container(
               decoration: BoxDecoration(
-                color: (loading) ? kCG.q(.5) : kCG,
+                color: loading ? appTheme.qb8 : primary,
                 borderRadius: .circular(4),
               ),
               padding: const .all(8),
-              child: Text(loading ? s.loading : s.start_to_chat, style: TS(c: qw)),
+              child: showLoadingProgress
+                  ? LoadingProgressButtonContent(
+                      progress: modelLoadingProgress,
+                      textStyle: TS(c: qw),
+                      indicatorColor: qw,
+                    )
+                  : Text(s.start_to_chat, style: TS(c: qw)),
             ),
           ),
         if (isCurrent)
           GestureDetector(
             onTap: null,
             child: Container(
-              decoration: BoxDecoration(color: kG.q(.5), borderRadius: 8.r),
+              decoration: BoxDecoration(color: kG.q(.5), borderRadius: 4.r),
               padding: const .all(8),
               child: Text(s.chatting, style: TS(c: qw)),
             ),
           ),
+        2.w,
       ],
     );
   }
@@ -756,7 +779,7 @@ class _LocalPthFolder extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final qb = ref.watch(P.app.qb);
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
     final folderName = path.basename(folder.path);
     final state = folder.state;
     final folderPath = folder.path;
@@ -764,7 +787,7 @@ class _LocalPthFolder extends ConsumerWidget {
     final files = folder.files;
     return Container(
       decoration: BoxDecoration(
-        color: customTheme.settingItem,
+        color: appTheme.settingItem,
         borderRadius: .circular(8),
       ),
       padding: const .all(8),
@@ -841,7 +864,7 @@ class _LocalPthFolder extends ConsumerWidget {
                 .map(
                   (e) => Container(
                     decoration: BoxDecoration(
-                      color: customTheme.settingItem,
+                      color: appTheme.settingItem,
                       borderRadius: .circular(8),
                       border: .all(color: qb.q(.1), width: .5),
                     ),

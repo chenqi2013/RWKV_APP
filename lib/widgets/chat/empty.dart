@@ -1,13 +1,17 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:math';
 
+// Flutter imports:
+import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:halo/halo.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/func/check_model_selection.dart';
 import 'package:zone/gen/l10n.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:halo/halo.dart';
 import 'package:zone/store/p.dart';
 import 'package:zone/widgets/chat/all_suggestion_dialog.dart';
 import 'package:zone/widgets/dev_options_dialog.dart';
@@ -154,7 +158,7 @@ class _EmptyV2 extends ConsumerWidget {
     return HSLColor.fromAHSL(1, Random().nextDouble() * 360, .6, 0.7).toColor();
   }
 
-  void onTap(dynamic suggestion) {
+  void _onTap(dynamic suggestion) {
     if (!checkModelSelection(preferredDemoType: .chat)) return;
     final s = (suggestion as Suggestion);
     P.chat.send(s.prompt.isEmpty ? s.display : s.prompt);
@@ -164,6 +168,9 @@ class _EmptyV2 extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
     final suggestions = ref.watch(P.suggestion.suggestion);
+
+    final appTheme = ref.watch(P.app.theme);
+    final bgColor = appTheme.qb144;
 
     return Column(
       mainAxisAlignment: .center,
@@ -180,21 +187,53 @@ class _EmptyV2 extends ConsumerWidget {
           const SizedBox(height: 12),
           Padding(
             padding: const .symmetric(horizontal: 24),
-            child: buildSuggestion(item),
+            child: Material(
+              borderRadius: .circular(60),
+              color: bgColor,
+              child: InkWell(
+                borderRadius: .circular(60),
+                onTap: () => _onTap(item),
+                child: Padding(
+                  padding: const .symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisSize: .min,
+                    children: [
+                      Container(
+                        height: 10,
+                        width: 10,
+                        decoration: BoxDecoration(
+                          color: _rndColor(),
+                          borderRadius: .circular(60),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          item is Suggestion ? item.display : item.toString(),
+                          maxLines: 1,
+                          overflow: .ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
         if (suggestions.isNotEmpty) const SizedBox(height: 12),
         if (suggestions.isNotEmpty)
           Material(
             borderRadius: .circular(60),
+            color: bgColor,
             child: InkWell(
               borderRadius: .circular(60),
               onTap: () async {
                 final suggestion = await AllSuggestionDialog.show(context);
-                if (suggestion != null) onTap(suggestion);
+                if (suggestion != null) _onTap(suggestion);
               },
               child: Padding(
-                padding: const .symmetric(horizontal: 22, vertical: 12),
+                padding: const .symmetric(horizontal: 20, vertical: 12),
                 child: Text(
                   S.current.more_questions,
                   maxLines: 1,
@@ -205,40 +244,6 @@ class _EmptyV2 extends ConsumerWidget {
           ),
         const SizedBox(height: 16),
       ],
-    );
-  }
-
-  Widget buildSuggestion(dynamic item) {
-    return Material(
-      borderRadius: .circular(60),
-      child: InkWell(
-        borderRadius: .circular(60),
-        onTap: () => onTap(item),
-        child: Padding(
-          padding: const .symmetric(horizontal: 22, vertical: 12),
-          child: Row(
-            mainAxisSize: .min,
-            children: [
-              Container(
-                height: 10,
-                width: 10,
-                decoration: BoxDecoration(
-                  color: _rndColor(),
-                  borderRadius: .circular(60),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Flexible(
-                child: Text(
-                  item is Suggestion ? item.display : item.toString(),
-                  maxLines: 1,
-                  overflow: .ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

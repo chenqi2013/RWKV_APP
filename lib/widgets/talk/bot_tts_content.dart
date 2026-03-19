@@ -1,17 +1,22 @@
-// ignore: unused_import
-
+// Dart imports:
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
+import 'package:path/path.dart' as path;
 import 'package:share_plus/share_plus.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/demo_type.dart';
 import 'package:zone/model/message.dart' as model;
-import 'package:path/path.dart' as path;
 import 'package:zone/store/p.dart';
 
 class BotTtsContent extends ConsumerStatefulWidget {
@@ -26,15 +31,18 @@ class BotTtsContent extends ConsumerStatefulWidget {
 
 class _BotTtsContentState extends ConsumerState<BotTtsContent> {
   Timer? _timer;
+  Timer? _durationRetryTimer;
   int _tick = 0;
   double _length = 4000;
+  int _durationRetryCount = 0;
+  static const int _maxDurationRetryCount = 16;
 
   @override
   void initState() {
     super.initState();
 
     if (widget.msg.isMine) return;
-    const DemoType demoType = .tts;
+    const demoType = DemoType.tts;
     if (demoType != .tts) return;
 
     ref.listenManual(P.msg.latestClicked, (previous, next) {
@@ -49,11 +57,7 @@ class _BotTtsContentState extends ConsumerState<BotTtsContent> {
       }
     });
 
-    _syncWavDuration().then((value) {
-      if (_length == value) return;
-      _length = value;
-      if (mounted) setState(() {});
-    });
+    unawaited(_refreshWavDuration());
   }
 
   @override
@@ -61,15 +65,50 @@ class _BotTtsContentState extends ConsumerState<BotTtsContent> {
     super.dispose();
     _timer?.cancel();
     _timer = null;
+    _durationRetryTimer?.cancel();
+    _durationRetryTimer = null;
+  }
+
+  @override
+  void didUpdateWidget(covariant BotTtsContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final audioUrlChanged = oldWidget.msg.audioUrl != widget.msg.audioUrl;
+    final changedToDone = oldWidget.msg.changing && !widget.msg.changing;
+    if (!audioUrlChanged && !changedToDone) return;
+    _durationRetryCount = 0;
+    _durationRetryTimer?.cancel();
+    _durationRetryTimer = null;
+    unawaited(_refreshWavDuration());
+  }
+
+  Future<void> _refreshWavDuration() async {
+    final value = await _syncWavDuration();
+    if (_length != value) {
+      _length = value;
+      if (mounted) {
+        setState(() {});
+      }
+    }
+
+    if (value > 0) {
+      _durationRetryCount = 0;
+      _durationRetryTimer?.cancel();
+      _durationRetryTimer = null;
+      return;
+    }
+
+    final audioUrl = widget.msg.audioUrl;
+    if (audioUrl == null || widget.msg.changing || _durationRetryCount >= _maxDurationRetryCount) return;
+
+    _durationRetryCount += 1;
+    _durationRetryTimer?.cancel();
+    _durationRetryTimer = Timer(250.ms, () {
+      if (!mounted) return;
+      unawaited(_refreshWavDuration());
+    });
   }
 
   Future<double> _syncWavDuration() async {
-    final filePaths = widget.msg.ttsFilePaths ?? [];
-    if (filePaths.isNotEmpty) {
-      final durations = await Future.wait(filePaths.map((e) => _getWavDuration(e)));
-      return durations.reduce((a, b) => a + b).toDouble();
-    }
-
     final audioUrl = widget.msg.audioUrl;
     if (audioUrl != null) {
       final value = await _getWavDuration(audioUrl);
@@ -82,31 +121,23 @@ class _BotTtsContentState extends ConsumerState<BotTtsContent> {
   @override
   Widget build(BuildContext context) {
     if (widget.msg.isMine) return const SizedBox.shrink();
+    final theme = Theme.of(context);
     final s = S.of(context);
-
-    _syncWavDuration().then((value) {
-      if (_length == value) return;
-      _length = value;
-      if (mounted) setState(() {});
-    });
 
     final generating = ref.watch(P.talk.generating);
 
     final changing = widget.msg.changing;
     // final changing = true;
 
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final primaryColor = theme.colorScheme.primary;
     final length = _length;
     final base = 4000;
-    final width = 80 * (length / (length + base)) + 55;
+    final width = math.max(92.0, 80 * (length / (length + base)) + 55).toDouble();
     final isPlaying = ref.watch(P.see.playing);
     final latestClickedMessage = ref.watch(P.msg.latestClicked);
     final isLatestClickedMessage = latestClickedMessage?.id == widget.msg.id;
 
-    final overallProgress = widget.msg.ttsOverallProgress ?? 0.0;
-    final perWavProgress = widget.msg.ttsPerWavProgress ?? [];
-
-    final allDone = overallProgress >= 1;
+    final allDone = !changing;
     final qb = ref.watch(P.app.qb);
 
     return Container(
@@ -118,25 +149,6 @@ class _BotTtsContentState extends ConsumerState<BotTtsContent> {
         mainAxisSize: .min,
         crossAxisAlignment: .stretch,
         children: [
-          if (!allDone)
-            Wrap(
-              children: [
-                ...perWavProgress.map((e) {
-                  return Column(
-                    children: [
-                      Icon(Icons.audio_file, color: primaryColor),
-                      const SizedBox(height: 2),
-                      if (e < 1)
-                        Text(
-                          (e * 100).toStringAsFixed(0) + "%",
-                          style: TS(c: qb.q(.8), w: .w600, s: 10),
-                        ),
-                      if (e >= 1) Icon(Icons.check, color: primaryColor, size: 12),
-                    ],
-                  );
-                }),
-              ],
-            ),
           if (changing && generating)
             Padding(
               padding: const .only(top: 4, bottom: 12),
@@ -164,9 +176,9 @@ class _BotTtsContentState extends ConsumerState<BotTtsContent> {
                 ],
               ),
             ),
-          if (!changing || widget.msg.ttsHasContent)
+          if (!changing)
             Padding(
-              padding: const .only(top: 4, bottom: 4),
+              padding: const .only(top: 4, bottom: 2),
               child: Row(
                 mainAxisAlignment: .start,
                 children: [
@@ -190,33 +202,18 @@ class _BotTtsContentState extends ConsumerState<BotTtsContent> {
                     (length / 1000).toStringAsFixed(0) + "s",
                     style: TS(c: qb.q(.8), w: .w600),
                   ),
-                  if (allDone)
-                    GestureDetector(
-                      onTap: _onSharePressed,
-                      child: Container(
-                        decoration: const BoxDecoration(color: Colors.transparent),
-                        padding: const .only(left: 8, right: 4),
-                        child: const Icon(Icons.share),
-                      ),
+                  GestureDetector(
+                    onTap: _onSharePressed,
+                    child: Container(
+                      decoration: const BoxDecoration(color: Colors.transparent),
+                      padding: const .only(left: 8, right: 4),
+                      child: const Icon(Icons.share),
                     ),
+                  ),
                 ],
               ),
             ),
-          if (allDone) const SizedBox(height: 12),
-          if (!changing && !allDone)
-            Row(
-              mainAxisAlignment: .start,
-              children: [
-                GestureDetector(
-                  onTap: _onSharePressed,
-                  child: Container(
-                    decoration: const BoxDecoration(color: Colors.transparent),
-                    padding: const .symmetric(horizontal: 3, vertical: 12),
-                    child: const Icon(Icons.share),
-                  ),
-                ),
-              ],
-            ),
+          if (allDone) const SizedBox(height: 4),
         ],
       ),
     );

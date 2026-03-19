@@ -1,12 +1,19 @@
+// Flutter imports:
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/custom_widgets/unordered_ordered_list.dart' show OrderedListView;
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/store/p.dart';
@@ -14,7 +21,14 @@ import 'package:zone/store/p.dart';
 class MarkdownRender extends ConsumerWidget {
   final String raw;
   final Color? color;
-  const MarkdownRender({super.key, required this.raw, this.color});
+  final bool useMessageLineHeight;
+
+  const MarkdownRender({
+    super.key,
+    required this.raw,
+    this.color,
+    this.useMessageLineHeight = false,
+  });
 
   void _onTapLink(String? href, String title) async {
     if (href == null) return;
@@ -24,30 +38,44 @@ class MarkdownRender extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final textScaler = MediaQuery.textScalerOf(context);
     final primary = theme.colorScheme.primary;
     const scale = Config.msgFontScale;
+    final textScaleFactor = textScaler.scale(1.0);
+    final effectiveScale = scale * textScaleFactor;
     final qb = ref.watch(P.app.qb);
+    final effectiveMessageLineHeight = ref.watch(P.preference.effectiveMessageLineHeight);
+    final messageLineHeight = useMessageLineHeight ? effectiveMessageLineHeight : null;
     final gptMarkdownStyle = TextStyle(
       color: color ?? qb,
-      fontSize: Config.markdownBodyFontSize * scale,
+      fontSize: Config.markdownBodyFontSize * effectiveScale,
+      height: messageLineHeight,
     );
 
-    final headerFontSizes = Config.markdownHeaderFontSizes.map((e) => e * scale).toList();
+    final headerFontSizes = Config.markdownHeaderFontSizes.map((e) => e * effectiveScale).toList();
 
     final gptThemeData = GptMarkdownTheme.of(context).copyWith(
-      h1: TextStyle(fontSize: headerFontSizes[0], fontWeight: .w500),
-      h2: TextStyle(fontSize: headerFontSizes[1], fontWeight: .w500),
-      h3: TextStyle(fontSize: headerFontSizes[2], fontWeight: .w500),
-      h4: TextStyle(fontSize: headerFontSizes[3]),
-      h5: TextStyle(fontSize: headerFontSizes[4]),
-      h6: TextStyle(fontSize: headerFontSizes[5]),
+      h1: TextStyle(fontSize: headerFontSizes[0], fontWeight: .w500, height: messageLineHeight),
+      h2: TextStyle(fontSize: headerFontSizes[1], fontWeight: .w500, height: messageLineHeight),
+      h3: TextStyle(fontSize: headerFontSizes[2], fontWeight: .w500, height: messageLineHeight),
+      h4: TextStyle(fontSize: headerFontSizes[3], height: messageLineHeight),
+      h5: TextStyle(fontSize: headerFontSizes[4], height: messageLineHeight),
+      h6: TextStyle(fontSize: headerFontSizes[5], height: messageLineHeight),
       hrHeight: 6,
     );
 
-    final GptMarkdown gptMarkdown = GptMarkdown(
+    final inlineComponents = <MarkdownComponent>[
+      for (final MarkdownComponent component in MarkdownComponent.inlineComponents)
+        if (component is ItalicMd) _SafeItalicMd() else component,
+      _HtmlBreakMd(),
+    ];
+
+    final gptMarkdown = GptMarkdown(
       raw.replaceAll("\n\n", "\n").trim(),
       onLinkTap: _onTapLink,
       style: gptMarkdownStyle,
+      textScaler: .noScaling,
+      inlineComponents: inlineComponents,
       addNewLineAfterH1: false,
       orderedListBuilder: (context, no, child, config) => OrderedListView(
         no: "$no.",
@@ -67,20 +95,71 @@ class MarkdownRender extends ConsumerWidget {
       highlightBuilder: (context, text, style) => _Highlight(text: text, style: style),
     );
 
-    return Theme(
-      data: ThemeData(
-        checkboxTheme: CheckboxThemeData(
-          visualDensity: const VisualDensity(horizontal: -4.0, vertical: -4.0),
-          side: BorderSide(width: 1, color: primary),
-          shape: RoundedRectangleBorder(borderRadius: .circular(4)),
-          materialTapTargetSize: .shrinkWrap,
+    return MediaQuery.withNoTextScaling(
+      child: Theme(
+        data: theme.copyWith(
+          checkboxTheme: CheckboxThemeData(
+            visualDensity: const VisualDensity(horizontal: -4.0, vertical: -4.0),
+            side: BorderSide(width: 1, color: primary),
+            shape: RoundedRectangleBorder(borderRadius: .circular(4)),
+            materialTapTargetSize: .shrinkWrap,
+          ),
+          textTheme: theme.textTheme.apply(fontSizeFactor: effectiveScale),
         ),
-        textTheme: theme.textTheme.apply(fontSizeFactor: scale),
+        child: DefaultTextStyle.merge(
+          style: gptMarkdownStyle,
+          child: GptMarkdownTheme(
+            gptThemeData: gptThemeData,
+            child: gptMarkdown,
+          ),
+        ),
       ),
-      child: GptMarkdownTheme(
-        gptThemeData: gptThemeData,
-        child: gptMarkdown,
+    );
+  }
+}
+
+class _SafeItalicMd extends InlineMd {
+  @override
+  RegExp get exp => RegExp(
+    r"(?:(?<![\w\*])\*(?![\s\*])(.+?)(?<!\s)\*(?![\w\*]))",
+    dotAll: true,
+  );
+
+  @override
+  InlineSpan span(
+    BuildContext context,
+    String text,
+    final GptMarkdownConfig config,
+  ) {
+    final match = exp.firstMatch(text.trim());
+    final data = match?[1] ?? "";
+    final conf = config.copyWith(
+      style: (config.style ?? const TextStyle()).copyWith(
+        fontStyle: FontStyle.italic,
       ),
+    );
+    return TextSpan(
+      children: MarkdownComponent.generate(context, data, conf, false),
+      style: conf.style,
+    );
+  }
+}
+
+class _HtmlBreakMd extends InlineMd {
+  _HtmlBreakMd();
+
+  @override
+  RegExp get exp => RegExp(r"<[bB][rR]\s*/?>");
+
+  @override
+  InlineSpan span(
+    BuildContext context,
+    String text,
+    final GptMarkdownConfig config,
+  ) {
+    return TextSpan(
+      text: "\n",
+      style: config.style,
     );
   }
 }
@@ -92,16 +171,17 @@ class _Highlight extends ConsumerWidget {
   const _Highlight({required this.text, required this.style});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dark = ref.watch(P.app.dark);
-    final qw = ref.watch(P.app.qw);
-    final qb = ref.watch(P.app.qb);
+    final theme = Theme.of(context);
+    final appTheme = ref.watch(P.app.theme);
+
+    final inlineCodeBackgroundColor = appTheme.inlineCodeBackgroundColor;
 
     final monospaceFF = ref.watch(P.font.finalMonospaceFontFamily);
     return Container(
       decoration: BoxDecoration(
-        color: dark ? qw.q(.5) : qb.q(.04),
+        color: inlineCodeBackgroundColor,
         borderRadius: .circular(6),
-        border: .all(color: dark ? qb.q(.2) : qb.q(.2)),
+        border: .all(color: theme.dividerColor.q(appTheme.isLight ? .15 : .45)),
       ),
       padding: const .only(left: 4, right: 4, top: 0, bottom: 0),
       child: Text.rich(
@@ -231,6 +311,8 @@ class _CodeState extends ConsumerState<_Code> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final appTheme = ref.watch(P.app.theme);
     final defaultHighlighter = ref.watch(P.mdRender.highlighters(P.mdRender.defaultCodeLanguage));
     final defaultDarkHighlighter = ref.watch(P.mdRender.darkHighlighters(P.mdRender.defaultCodeLanguage));
 
@@ -255,14 +337,18 @@ class _CodeState extends ConsumerState<_Code> {
       highlightedCode = TextSpan(text: widget.code.trim());
     }
 
-    final qw = ref.watch(P.app.qw);
     final qb = ref.watch(P.app.qb);
+    final codeBlockBackgroundColor = switch (appTheme) {
+      .light => qb.q(.04),
+      .dim => qb.q(.08),
+      .lightsOut => qb.q(.1),
+    };
 
     final monospaceFF = ref.watch(P.font.finalMonospaceFontFamily);
 
     return Container(
       decoration: BoxDecoration(
-        color: dark ? qw.q(.5) : qb.q(.04),
+        color: codeBlockBackgroundColor,
         borderRadius: .circular(8),
       ),
       padding: const .only(left: 0, right: 0, top: 4, bottom: 4),
@@ -281,7 +367,7 @@ class _CodeState extends ConsumerState<_Code> {
               const Spacer(),
               IconButton(
                 onPressed: _onCopyPressed,
-                icon: const Icon(Icons.copy),
+                icon: const Icon(Symbols.content_copy),
                 color: qb.q(.5),
                 iconSize: 20,
                 style: IconButton.styleFrom(
@@ -297,12 +383,9 @@ class _CodeState extends ConsumerState<_Code> {
             ],
           ),
           const SizedBox(height: 4),
-          Divider(
-            color: qb.q(.1),
-            thickness: 1,
-            height: 1,
-            indent: 0,
-            endIndent: 0,
+          Container(
+            height: .5,
+            color: theme.dividerColor.q(appTheme.isLight ? .35 : .6),
           ),
           const SizedBox(height: 4),
           NotificationListener<ScrollNotification>(

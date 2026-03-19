@@ -13,16 +13,16 @@ enum _EA {
 
 final _httpClient = http.Client();
 
-Future<T?> Function<T extends http.BaseResponse>(
-  Future<T> response, {
+Future<ResponseT?> Function<ResponseT extends http.BaseResponse>(
+  Future<ResponseT> response, {
   required Uri uri,
   required Map<String, String> headers,
   required List<_EA> ea,
   Encoding? encoding,
 })
 _errorWrapper =
-    <T extends http.BaseResponse>(
-      Future<T> response, {
+    <ResponseT extends http.BaseResponse>(
+      Future<ResponseT> response, {
       required Uri uri,
       required Map<String, String> headers,
       required List<_EA> ea,
@@ -39,6 +39,32 @@ _errorWrapper =
         return null;
       }
     };
+
+Uri _buildUri(
+  String url, {
+  Map<String, dynamic> query = const {},
+  String? domain,
+}) {
+  if (url.startsWith("https://") || url.startsWith("http://")) {
+    final uri = Uri.parse(url);
+    final mergedQuery = {...uri.queryParameters, ...query.allString};
+    return uri.replace(queryParameters: mergedQuery.isEmpty ? null : mergedQuery);
+  }
+
+  while (url.startsWith("/")) {
+    url = url.substring(1);
+  }
+
+  final base = Uri.parse(domain ?? Config.domain);
+  final mergedQuery = {...base.queryParameters, ...query.allString};
+  final basePath = base.path.replaceFirst(RegExp(r"/$"), "");
+  final nextPath = [basePath, url].where((segment) => segment.isNotEmpty).join("/");
+
+  return base.replace(
+    path: nextPath,
+    queryParameters: mergedQuery.isEmpty ? null : mergedQuery,
+  );
+}
 
 // ignore: unused_element
 Future<Object?> _post(
@@ -59,21 +85,7 @@ Future<Object?> _post(
   }
 
   ea = ea ?? [];
-  Uri uri;
-  if (url.startsWith("https://") || url.startsWith("http://")) {
-    uri = Uri.parse(url);
-  } else {
-    while (url.startsWith("/")) {
-      url = url.substring(1);
-    }
-    final r = (domain ?? Config.domain).split("://");
-    uri = Uri(
-      scheme: r[0],
-      host: r[1],
-      path: url,
-      queryParameters: query.isNotEmpty ? query.allString : null,
-    );
-  }
+  final uri = _buildUri(url, query: query, domain: domain);
 
   final headers = _buildHeaders();
   headers['Token'] = token;
@@ -114,17 +126,7 @@ Stream<String> _postStreaming(
   Map<String, String> headers = const {},
 }) async* {
   ea = ea ?? [];
-
-  while (url.startsWith("/")) {
-    url = url.substring(1);
-  }
-  final r = (domain ?? Config.domain).split("://");
-  final uri = Uri(
-    scheme: r[0],
-    host: r[1],
-    path: url,
-    queryParameters: query.isNotEmpty ? query.allString : null,
-  );
+  final uri = _buildUri(url, query: query, domain: domain);
 
   final finalHeaders = {..._buildHeaders(), ...headers};
   switch (contentType) {
@@ -151,7 +153,7 @@ Stream<String> _postStreaming(
     return;
   }
 
-  final Stream<String> stream = res.stream.transform(utf8.decoder).where((event) {
+  final stream = res.stream.transform(utf8.decoder).where((event) {
     return event.isNotEmpty;
   });
 
@@ -169,13 +171,7 @@ Future<Object?> _postMultipart(
   String? domain,
 }) async {
   ea = ea ?? [];
-  final r = (domain ?? Config.domain).split("://");
-  final uri = Uri(
-    scheme: r[0],
-    host: r[1],
-    path: url,
-    queryParameters: query.isNotEmpty ? query.allString : null,
-  );
+  final uri = _buildUri(url, query: query, domain: domain);
   final headers = _buildHeaders();
   final request = http.MultipartRequest("POST", uri);
 
@@ -188,7 +184,7 @@ Future<Object?> _postMultipart(
   }
 
   for (final f in files) {
-    final http.MultipartFile file = await http.MultipartFile.fromPath("file", f.path);
+    final file = await http.MultipartFile.fromPath("file", f.path);
     request.files.add(file);
   }
 
@@ -215,7 +211,7 @@ Future<Object?> _put(
 }) async {
   ea = ea ?? [];
   try {
-    final uri = Uri.parse((domain ?? Config.domain) + url);
+    final uri = _buildUri(url, domain: domain);
     final headers = _buildHeaders();
     late final Object? findlBody;
     switch (contentType) {
@@ -259,19 +255,7 @@ Future<Object?> _get(
 }) async {
   ea = ea ?? [];
   try {
-    while (url.startsWith("/")) {
-      url = url.substring(1);
-    }
-    final r = (domain ?? Config.domain).split("://");
-    Uri uri = Uri(
-      scheme: r[0],
-      host: r[1],
-      path: url,
-      queryParameters: query.isNotEmpty ? query.allString : null,
-    );
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      uri = Uri.parse(url);
-    }
+    final uri = _buildUri(url, query: query, domain: domain);
     final headers = _buildHeaders();
     switch (contentType) {
       case ContentType.json:
@@ -315,13 +299,7 @@ Future<Object?> _delete(
   String? domain,
 }) async {
   ea = ea ?? [];
-  final r = (domain ?? Config.domain).split("://");
-  final uri = Uri(
-    scheme: r[0],
-    host: r[1],
-    path: url,
-    queryParameters: query.isNotEmpty ? query.allString : null,
-  );
+  final uri = _buildUri(url, query: query, domain: domain);
   final headers = _buildHeaders();
   late final Object? findlBody;
   switch (contentType) {
@@ -346,7 +324,7 @@ Future<Object?> _delete(
 }
 
 Map<String, String> _buildHeaders() {
-  final Map<String, String> header = {};
+  final header = <String, String>{};
   header["Application-Build-Number"] = P.app.buildNumber.q;
   header["Application-Version"] = P.app.version.q;
   header["Operating-System"] = Platform.operatingSystem;

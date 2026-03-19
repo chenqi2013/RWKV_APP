@@ -308,7 +308,6 @@ extension _$Talk on _Talk {
     P.chat._updateMessageById(
       id: receiveId,
       changing: !allReceived,
-      ttsOverallProgress: allReceived ? 1.0 : 0.5,
     );
 
     this.generating.q = generating;
@@ -450,7 +449,7 @@ extension $Talk on _Talk {
 
     if (generating.q) {
       qqq("Generating is true");
-      Alert.warning("TTS is running, please wait for it to finish");
+      Alert.warning(S.current.tts_is_running_please_wait);
       return;
     }
 
@@ -461,9 +460,14 @@ extension $Talk on _Talk {
     final id = HF.milliseconds;
     final receiveId = HF.milliseconds + 1;
     final spkName = selectedSpkName.q;
+    final currentModel = P.rwkv.latestModel.q;
+    final currentGroupInfo = P.rwkv.currentGroupInfo.q;
+    final currentModelName = currentModel?.name ?? currentGroupInfo?.displayName;
 
     if (spkName == null && this.selectSourceAudioPath.q == null) {
-      Alert.warning("Please select a spk or a wav file");
+      Alert.warning(S.current.please_select_a_spk_or_a_wav_file);
+      await 500.msLater;
+      await TTSVoiceSourcePanels.showVoiceSourceTypePanel();
       return;
     }
 
@@ -479,7 +483,7 @@ extension $Talk on _Talk {
     // final outputWavPath = "/sdcard/Download/$receiveId.output.wav";
 
     if (ttsText.isEmpty) {
-      Alert.warning("Please enter text to generate TTS");
+      Alert.warning(S.current.please_enter_text_to_generate_tts);
       return;
     }
 
@@ -520,9 +524,7 @@ extension $Talk on _Talk {
       paused: false,
       type: MessageType.ttsGeneration,
       audioUrl: outputWavPath,
-      ttsOverallProgress: 0.0,
-      ttsPerWavProgress: const [],
-      ttsFilePaths: const [],
+      modelName: currentModelName,
     );
 
     P.chat.receiveId.q = receiveId;

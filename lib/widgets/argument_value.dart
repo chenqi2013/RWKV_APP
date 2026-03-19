@@ -1,8 +1,11 @@
-// ignore: unused_import
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
 import 'package:zone/model/argument.dart';
 import 'package:zone/store/p.dart';
 import 'package:zone/widgets/arguments_panel.dart';
@@ -32,7 +35,7 @@ class ArgumentValue extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final _ = ref.watch(P.rwkv.supportedBatchSizes);
-    final num builtInValue = switch (argument) {
+    final builtInValue = switch (argument) {
       Argument.batchCount => ref.watch(P.chat.batchCount),
       Argument.batchVW => ref.watch(P.chat.batchVW),
       _ => ref.watch(P.rwkv.arguments(argument)),
@@ -56,6 +59,7 @@ class ArgumentValue extends ConsumerWidget {
     }
     if (!argument.show) return const SizedBox.shrink();
     final qb = ref.watch(P.app.qb);
+
     return Column(
       crossAxisAlignment: .stretch,
       children: [

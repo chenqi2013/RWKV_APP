@@ -276,7 +276,7 @@ extension $Conversation on _Conversation {
       }
 
       // 6. 创建文件
-      final Directory tempDir = await getTemporaryDirectory();
+      final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = "${conversation.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')}_$timestamp.txt";
       final file = File('${tempDir.path}/$fileName');
@@ -284,9 +284,12 @@ extension $Conversation on _Conversation {
 
       // 7. 分享文件
       final xFile = XFile(file.path, mimeType: 'text/plain');
-      await Share.shareXFiles(
-        [xFile],
-        subject: conversation.title,
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [xFile],
+          subject: conversation.title,
+          title: conversation.title,
+        ),
       );
     } catch (e) {
       qqe("Export conversation failed: $e");

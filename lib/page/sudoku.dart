@@ -1,17 +1,20 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
+import 'dart:math' as math;
 import 'dart:math';
 
-import 'package:adaptive_dialog/adaptive_dialog.dart';
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:adaptive_dialog/adaptive_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/gen/l10n.dart';
-import 'dart:math' as math;
-
 import 'package:zone/store/p.dart';
 import 'package:zone/widgets/menu.dart';
 import 'package:zone/widgets/model_selector.dart';
@@ -308,8 +311,8 @@ class _UI extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final RenderBox renderBox = context.findRenderObject() as RenderBox;
-      final Offset position = renderBox.localToGlobal(Offset.zero);
+      final renderBox = context.findRenderObject() as RenderBox;
+      final position = renderBox.localToGlobal(Offset.zero);
       P.sudoku.uiOffset.q = Offset(position.dx, 0);
     });
 
@@ -327,7 +330,7 @@ class _UI extends ConsumerWidget {
 
     final shouldUseVerticalLayout = isDesktop && ratio < 1.9 && !isPortrait;
 
-    final List<Widget> buttons = [
+    final buttons = <Widget>[
       const SizedBox(width: 12, height: 12),
       Text(
         Config.appTitle,
@@ -413,7 +416,7 @@ class _Sudoku extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = ref.watch(P.app.isDesktop);
-    final double magnification = isDesktop ? 4 : 1;
+    final magnification = isDesktop ? 4 : 1;
     return Container(
       decoration: const BoxDecoration(color: _kGridBGColor),
       padding: .all(4 * magnification.toDouble()),
@@ -435,7 +438,7 @@ class _Board extends ConsumerWidget {
     final staticData = ref.watch(P.sudoku.staticData);
     final dynamicData = ref.watch(P.sudoku.dynamicData);
     final isDesktop = ref.watch(P.app.isDesktop);
-    final double magnification = isDesktop ? 2 : 1;
+    final magnification = isDesktop ? 2 : 1;
     return Column(
       children:
           List.generate(9, (rowIndex) {
@@ -647,7 +650,7 @@ class _Grid extends ConsumerWidget {
       };
     });
 
-    final double magnification = isDesktop ? 2 : 1;
+    final magnification = isDesktop ? 2 : 1;
     return GestureDetector(
       onTap: () => _onPressed(context, ref),
       child: AnimatedContainer(

@@ -1,3 +1,5 @@
+// Project imports:
+import 'package:zone/args.dart';
 import 'package:zone/router/page_key.dart';
 
 abstract class Config {
@@ -13,9 +15,8 @@ abstract class Config {
   static const desktopModelsDirName = "models";
   static const mobileModelsDirName = "rwkv_chat_models";
 
-  static const domain = "https://api-model.rwkvos.com";
-  // static const apiv2 = "http://localhost:3462";
-  static const apiv2 = "http://api.rwkv.halowang.cloud";
+  static const domain = Args.domain;
+  static const suggestionsUrl = "$domain/suggestions.json";
 
   static const timeout = Duration(seconds: 60);
 
@@ -50,7 +51,8 @@ abstract class Config {
     'sans-serif',
   ];
 
-  static const maxTitleLength = 60;
+  static const maxTitleLength = 120;
+  static const legacyMaxTitleLength = 60;
 
   static const batchMarker = "V9m!T7#q2fH@x1Lz*8YwK0^g4";
   static const userMsgModifierSep = "G7!k9#rVq2@Xz8LpY4m%";
@@ -59,6 +61,10 @@ abstract class Config {
   // Markdown font sizes: h1=18, h2=17, h3=16, h4=16, h5=15, h6=15, body=14
   static const markdownHeaderFontSizes = [18.0, 17.0, 16.0, 16.0, 15.0, 15.0];
   static const markdownBodyFontSize = 14.0;
+  static const newConversationTokenReminderThreshold = Args.conversationTokenReminderThreshold;
 
   static const seePrefillId = -42;
+  static const chatPrefillId = -43;
+
+  static final inputBarDebuggerPassword = 'RWKV_A9!vT7#qL2@mX8kN5%pR';
 }

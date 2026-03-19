@@ -1,16 +1,19 @@
-// ignore: unused_import
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// Project imports:
 import 'package:zone/router/page_key.dart';
 import 'package:zone/store/p.dart';
 import 'package:zone/widgets/performance_info.dart';
 
 extension _VisiblePage on PageKey {
   bool get isVisible => switch (this) {
-    .chat => true,
-    .talk => true,
-    .see => true,
+    .chat => false,
+    .talk => false,
+    .see => false,
     .translator => true,
     .ocr => true,
     _ => false,
@@ -30,21 +33,22 @@ class FloatingPerformaceInfo extends ConsumerWidget {
     final paddingTop = ref.watch(P.app.paddingTop);
     final navbarHeight = 58.0;
     final screenWidth = ref.watch(P.app.screenWidth);
+    final modelSelectorShown = ref.watch(P.remote.modelSelectorShown);
 
     final pageKey = ref.watch(P.app.pageKey);
-    final isVisible = pageKey.isVisible;
+    final isVisible = pageKey.isVisible && !modelSelectorShown;
     final isMobile = ref.watch(P.app.isMobile);
     final short = (pageKey.short & isMobile) || screenWidth <= 400;
 
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1000),
       curve: Curves.easeOutCirc,
       left: 54,
       top: isVisible ? paddingTop : -100,
       height: navbarHeight,
       child: AnimatedOpacity(
         opacity: pageKey.isVisible ? 0.9 : 0.0,
-        duration: const Duration(milliseconds: 2000),
+        duration: const Duration(milliseconds: 1000),
         curve: Curves.easeOutCirc,
         child: IgnorePointer(
           child: Material(

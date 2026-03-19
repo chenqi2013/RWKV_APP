@@ -1,13 +1,19 @@
 // ignore_for_file: dead_code, unused_local_variable, unused_element
 
+// Dart imports:
 import 'dart:math';
 
+// Flutter imports:
 import 'package:flutter/foundation.dart';
-import 'package:zone/args.dart';
-import 'package:zone/store/p.dart';
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
+import 'package:zone/args.dart';
+import 'package:zone/store/p.dart';
 import 'package:zone/widgets/pager.dart';
 
 class Debugger extends ConsumerWidget {
@@ -15,7 +21,7 @@ class Debugger extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!Args.showHaloDebugger) return const SizedBox.shrink();
+    if (!false) return const SizedBox.shrink();
     if (!kDebugMode) return const SizedBox.shrink();
 
     final demoType = ref.watch(P.app.demoType);
@@ -52,7 +58,7 @@ class Debugger extends ConsumerWidget {
     final availableModels = ref.watch(P.remote.chatWeights);
     final disableRemoteConfig = Args.disableRemoteConfig;
     final preferredThemeMode = ref.watch(P.app.preferredThemeMode);
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
     final themeMode = ref.watch(P.preference.themeMode);
     final preferredDarkCustomTheme = ref.watch(P.preference.preferredDarkCustomTheme);
     final checkingLatency = ref.watch(P.guard.checkingLatency);
@@ -85,6 +91,23 @@ class Debugger extends ConsumerWidget {
     final usingCustomModelsDir = ref.watch(P.remote.usingCustomModelsDir);
     final customModelsDir = ref.watch(P.preference.customModelsDir);
 
+    final loadingProgress = ref.watch(P.rwkv.loadingProgress);
+
+    final isMobile = ref.watch(P.app.isMobile);
+
+    final maxWidthAllowedForLayout = ref.watch(P.ui.maxWidthAllowedForLayout);
+    final widthRequiredForLayout = ref.watch(P.ui.widthRequiredForLayout);
+    final shouldUseWrapRatherThanRow = ref.watch(P.ui.shouldUseWrapRatherThanRow);
+
+    final messageListLayoutKeys = ref.watch(P.ui.messageListLayoutKeys);
+
+    final homeItemTitleHeights = ref.watch(P.ui.homeItemTitleHeights);
+    final homeItemDescriptionHeights = ref.watch(P.ui.homeItemDescriptionHeights);
+    final maxHeightsOfHomeItemTitle = ref.watch(P.ui.maxHeightsOfHomeItemTitle);
+    final maxHeightsOfHomeItemDescription = ref.watch(P.ui.maxHeightsOfHomeItemDescription);
+
+    final questions = ref.watch(P.askQuestion.questions);
+
     const showDrawerWidth = false;
     const showEditingBotMessage = false;
     const showAvailableModels = false;
@@ -95,20 +118,49 @@ class Debugger extends ConsumerWidget {
     const showMessages = false;
     const showEditingIndex = false;
     const showAtMainPage = false;
-    const showPage = true;
+    const showPage = false;
     const showScreenWidth = false;
-    const showThinkingMode = true;
+    const showThinkingMode = false;
     const showDisableRemoteConfig = false;
     const showPreferredThemeMode = false;
     const showCustomTheme = false;
     const showThemeMode = false;
     const showPreferredDarkCustomTheme = false;
     const showCheckingLatency = false;
-    const showConversation = true;
-    const showCurrentModel = true;
+    const showConversation = false;
+    const showCurrentModel = false;
     const showLoading = false;
-    const showMsgNode = true;
-    const showSupportedBatchSizes = true;
+    const showMsgNode = false;
+    const showSupportedBatchSizes = false;
+    const showLoadingProgress = false;
+    const showMaxWidthAllowedForLayout = false;
+    const showWidthRequiredForLayout = false;
+    const showShouldUseWrapRatherThanRow = false;
+    const showMessageListLayoutKeys = false;
+    const showHomeItemTitleHeights = false;
+    const showHomeItemDescriptionHeights = false;
+    const showMaxHeightsOfHomeItemTitle = false;
+    const showMaxHeightsOfHomeItemDescription = false;
+    const showLoadedModels = false;
+    const showLoadingStatus = false;
+    const showUnzipping = false;
+    const showDemoType = false;
+    const showCurrentGroupInfo = false;
+    const showLatestModel = false;
+    const showGeneratingId = false;
+    const showHiddenPrefilling = false;
+    const showFrontendSocName = false;
+    const showFrontendSocBrand = false;
+    const showPreferredUIFont = false;
+    const showPreferredMonospaceFont = false;
+    const showPthFolderEntries = false;
+    const showPthFolders = false;
+    const showEffectiveModelsDir = false;
+    const showDefaultModelsDir = false;
+    const showUsingCustomModelsDir = false;
+    const showCustomModelsDir = false;
+    const showQuestions = true;
+    const showGenerating = true;
 
     return Positioned(
       left: 0,
@@ -132,50 +184,75 @@ class Debugger extends ConsumerWidget {
                 children:
                     [
                       (max(paddingTop, 40)).h,
-                      Text("loadedModels".codeToName),
-                      Text(loadedModels.entries.map((e) => "${e.key.name} id: ${e.value}").join("\n")),
-                      Text("loadingStatus".codeToName),
-                      Text(
-                        loadingStatus.entries.map((e) => "${e.key.name} ${e.value.toString().replaceAll("LoadingStatus", "")}").join("\n"),
-                      ),
-                      Text("unzipping".codeToName),
-                      Text(unzipping.toString()),
-                      Text("demoType".codeToName),
-                      Text(demoType.toString()),
-                      Text("currentGroupInfo".codeToName),
-                      Text(currentGroupInfo?.displayName ?? "null"),
-                      Text("latestModel".codeToName),
-                      Text(latestModel?.name ?? "null"),
-                      Text("generatingId".codeToName),
-                      Text(generatingId?.toString() ?? "null"),
-                      Text("generating".codeToName),
-                      Text(generating.toString()),
-                      Text("hiddenPrefilling".codeToName),
-                      Text(hiddenPrefilling.toString()),
-                      Text("socName".codeToName),
-                      Text(socName),
-                      Text("socBrand".codeToName),
-                      Text(socBrand.toString()),
-                      Text("frontendSocName".codeToName),
-                      Text(frontendSocName ?? "null"),
-                      Text("frontendSocBrand".codeToName),
-                      Text(frontendSocBrand.toString()),
-                      Text("preferredUIFont".codeToName),
-                      Text(preferredUIFont ?? "null"),
-                      Text("preferredMonospaceFont".codeToName),
-                      Text(preferredMonospaceFont ?? "null"),
-                      Text("pthFolderEntries".codeToName),
-                      Text(pthFolderEntries.map((e) => e.path + (e.bookmark != null ? " [bookmark]" : "")).join("\n")),
-                      Text("pthFolders".codeToName),
-                      Text(pthFolders.map((e) => "${e.path} ${e.state.toString()} ${e.files.length}").join("\n")),
-                      Text("effectiveModelsDir".codeToName),
-                      Text(effectiveModelsDir),
-                      Text("defaultModelsDir".codeToName),
-                      Text(defaultModelsDir),
-                      Text("usingCustomModelsDir".codeToName),
-                      Text(usingCustomModelsDir.toString()),
-                      Text("customModelsDir".codeToName),
-                      Text(customModelsDir ?? "null"),
+                      if (showLoadedModels) Text("loadedModels".codeToName),
+                      if (showLoadedModels) Text(loadedModels.entries.map((e) => "${e.key.name} id: ${e.value}").join("\n")),
+                      if (showLoadingStatus) Text("loadingStatus".codeToName),
+                      if (showLoadingStatus)
+                        Text(
+                          loadingStatus.entries
+                              .map((e) => "${e.key.name} ${e.value.toString().replaceAll("LoadingStatus", "")}")
+                              .join("\n"),
+                        ),
+                      if (showUnzipping) Text("unzipping".codeToName),
+                      if (showUnzipping) Text(unzipping.toString()),
+                      if (showDemoType) Text("demoType".codeToName),
+                      if (showDemoType) Text(demoType.toString()),
+                      if (showCurrentGroupInfo) Text("currentGroupInfo".codeToName),
+                      if (showCurrentGroupInfo) Text(currentGroupInfo?.displayName ?? "null"),
+                      if (showLatestModel) Text("latestModel".codeToName),
+                      if (showLatestModel) Text(latestModel?.name ?? "null"),
+                      if (showGeneratingId) Text("generatingId".codeToName),
+                      if (showGeneratingId) Text(generatingId?.toString() ?? "null"),
+                      if (showGenerating) Text("generating".codeToName),
+                      if (showGenerating) Text(generating.toString()),
+                      if (showHiddenPrefilling) Text("hiddenPrefilling".codeToName),
+                      if (showHiddenPrefilling) Text(hiddenPrefilling.toString()),
+                      if (showSocName) Text("socName".codeToName),
+                      if (showSocName) Text(socName),
+                      if (showSocBrand) Text("socBrand".codeToName),
+                      if (showSocBrand) Text(socBrand.toString()),
+                      if (showFrontendSocName) Text("frontendSocName".codeToName),
+                      if (showFrontendSocName) Text(frontendSocName ?? "null"),
+                      if (showFrontendSocBrand) Text("frontendSocBrand".codeToName),
+                      if (showFrontendSocBrand) Text(frontendSocBrand.toString()),
+                      if (showPreferredUIFont) Text("preferredUIFont".codeToName),
+                      if (showPreferredUIFont) Text(preferredUIFont ?? "null"),
+                      if (showPreferredMonospaceFont) Text("preferredMonospaceFont".codeToName),
+                      if (showPreferredMonospaceFont) Text(preferredMonospaceFont ?? "null"),
+                      if (!isMobile) Text("pthFolderEntries".codeToName),
+                      if (!isMobile) Text(pthFolderEntries.map((e) => e.path + (e.bookmark != null ? " [bookmark]" : "")).join("\n")),
+                      if (!isMobile) Text("pthFolders".codeToName),
+                      if (!isMobile) Text(pthFolders.map((e) => "${e.path} ${e.state.toString()} ${e.files.length}").join("\n")),
+                      if (!isMobile) Text("effectiveModelsDir".codeToName),
+                      if (!isMobile) Text(effectiveModelsDir),
+                      if (!isMobile) Text("defaultModelsDir".codeToName),
+                      if (!isMobile) Text(defaultModelsDir),
+                      if (!isMobile) Text("usingCustomModelsDir".codeToName),
+                      if (!isMobile) Text(usingCustomModelsDir.toString()),
+                      if (!isMobile) Text("customModelsDir".codeToName),
+                      if (!isMobile) Text(customModelsDir ?? "null"),
+                      if (showLoadingProgress) Text("loadingProgress".codeToName),
+                      if (showLoadingProgress) Text(loadingProgress.entries.map((e) => "${e.key.name} ${e.value}").join("\n")),
+                      if (showMaxWidthAllowedForLayout) Text("maxWidthAllowedForLayout".codeToName),
+                      if (showMaxWidthAllowedForLayout) Text(maxWidthAllowedForLayout.toString()),
+                      if (showWidthRequiredForLayout) Text("widthRequiredForLayout".codeToName),
+                      if (showWidthRequiredForLayout) Text(widthRequiredForLayout.toString()),
+                      if (showShouldUseWrapRatherThanRow) Text("shouldUseWrapRatherThanRow".codeToName),
+                      if (showShouldUseWrapRatherThanRow) Text(shouldUseWrapRatherThanRow.toString()),
+                      if (showMessageListLayoutKeys) Text("messageListLayoutKeys".codeToName),
+                      if (showMessageListLayoutKeys) Text(messageListLayoutKeys.entries.map((e) => "${e.key}: ${e.value}").join("\n")),
+                      if (showWidthRequiredForLayout) Text(widthRequiredForLayout.toString()),
+                      if (showHomeItemTitleHeights) Text("homeItemTitleHeights".codeToName),
+                      if (showHomeItemTitleHeights) Text(homeItemTitleHeights.entries.map((e) => "${e.key}: ${e.value}").join("\n")),
+                      if (showHomeItemDescriptionHeights) Text("homeItemDescriptionHeights".codeToName),
+                      if (showHomeItemDescriptionHeights)
+                        Text(homeItemDescriptionHeights.entries.map((e) => "${e.key}: ${e.value}").join("\n")),
+                      if (showMaxHeightsOfHomeItemTitle) Text("maxHeightsOfHomeItemTitle".codeToName),
+                      if (showMaxHeightsOfHomeItemTitle) Text(maxHeightsOfHomeItemTitle.toString()),
+                      if (showMaxHeightsOfHomeItemDescription) Text("maxHeightsOfHomeItemDescription".codeToName),
+                      if (showMaxHeightsOfHomeItemDescription) Text(maxHeightsOfHomeItemDescription.toString()),
+                      if (showQuestions) Text("questions".codeToName),
+                      if (showQuestions) Text(questions.join("\n")),
                     ].indexMap((index, e) {
                       return Container(
                         margin: .only(top: index % 2 == 0 ? 0 : 1),

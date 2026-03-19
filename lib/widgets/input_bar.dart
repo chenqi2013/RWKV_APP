@@ -1,62 +1,69 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:io';
 
-import 'package:halo_state/halo_state.dart';
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
+import 'package:halo_state/halo_state.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/demo_type.dart';
 import 'package:zone/store/p.dart';
-import 'package:zone/widgets/bottom_interactions.dart';
+import 'package:zone/widgets/input_interactions.dart';
 import 'package:zone/widgets/input_text_field.dart';
-import 'package:zone/widgets/talk/tts_bottom_interactions.dart';
 
 class InputBar extends ConsumerWidget {
   final DemoType preferredDemoType;
 
   const InputBar({super.key, this.preferredDemoType = .chat});
 
+  void _onChangeSize(Size size) {
+    P.chat.inputHeight.q = size.height;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final paddingBottom = ref.watch(P.app.quantizedIntPaddingBottom);
-    final isChat = preferredDemoType == .chat;
     final inRWKVSee = P.app.pageKey.q == .see;
 
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
+    final selectMessageMode = ref.watch(P.chat.isSharing);
+    if (selectMessageMode) return const SizedBox.shrink();
 
-    final imagePath = ref.watch(P.see.imagePath);
+    final appTheme = ref.watch(P.app.theme);
 
-    return MeasureSize(
-      onChange: (size) {
-        P.chat.inputHeight.q = size.height;
-      },
-      child: ClipRRect(
-        borderRadius: !isChat ? .zero : const .vertical(top: .circular(16)),
+    final gradientStartForInputBar = ref.watch(P.ui.gradientStartForInputBar);
+    final gradientForInputBar = ref.watch(P.ui.gradientForInputBar);
+
+    return Positioned(
+      bottom: 0,
+      right: 0,
+      left: 0,
+      child: MeasureSize(
+        onChange: _onChangeSize,
         child: Container(
           decoration: BoxDecoration(
-            color: theme.cardColor,
-            border: isChat
-                ? null
-                : Border(
-                    top: BorderSide(
-                      color: primary.q(.33),
-                      width: .5,
-                    ),
-                  ),
+            // color: kCR,
+            gradient: LinearGradient(
+              colors: [
+                appTheme.scaffoldBg.q(0),
+                appTheme.scaffoldBg.q(1),
+              ],
+              begin: Alignment(0, gradientStartForInputBar),
+              end: Alignment(0, gradientForInputBar),
+            ),
           ),
-          padding: .only(left: 8, top: 8, right: 8, bottom: paddingBottom + 8),
           child: AnimatedSize(
             duration: 250.ms,
             child: Column(
+              crossAxisAlignment: .start,
               children: [
+                if (preferredDemoType == .chat) const SizedBox(height: 12),
                 if (inRWKVSee) const _WaitingMsg(),
-                if (inRWKVSee) _ImagePreview(imagePath: imagePath ?? ""),
+                if (preferredDemoType != .tts) InputInteractions(preferredDemoType: preferredDemoType),
                 InputTextField(preferredDemoType: preferredDemoType),
-                if (preferredDemoType != .tts) BottomInteractions(preferredDemoType: preferredDemoType),
-                if (preferredDemoType == .tts) const TTSBottomInteractions(),
               ],
             ),
           ),
@@ -75,30 +82,35 @@ class _WaitingMsg extends ConsumerWidget {
     final waitingText = ref.watch(P.see.waitingText);
     if (waitingText == null) return const SizedBox.shrink();
     final waitingImagePath = ref.watch(P.see.waitingImagePath);
+    final appTheme = ref.watch(P.app.theme);
+    final horizontalPadding = appTheme.inputBarHorizontalPadding;
     final count = 1;
-    return Column(
-      crossAxisAlignment: .stretch,
-      children: [
-        Text(
-          s.message_in_queue(count),
-          style: const TS(s: 12),
-        ),
-        Container(
-          decoration: BoxDecoration(color: kC.q(.1), borderRadius: 12.r),
-          margin: const .only(bottom: 4, top: 4),
-          child: Row(
-            crossAxisAlignment: .center,
-            children: [
-              if (waitingImagePath != null) _ImagePreview(small: true, imagePath: waitingImagePath),
-              if (waitingImagePath != null) const SizedBox(width: 4),
-              Text(
-                waitingText,
-                style: const TS(s: 12),
-              ),
-            ],
+    return Padding(
+      padding: .symmetric(horizontal: horizontalPadding),
+      child: Column(
+        crossAxisAlignment: .stretch,
+        children: [
+          Text(
+            s.message_in_queue(count),
+            style: const TS(s: 12),
           ),
-        ),
-      ],
+          Container(
+            decoration: BoxDecoration(color: kC.q(.1), borderRadius: 12.r),
+            margin: const .only(bottom: 4, top: 4),
+            child: Row(
+              crossAxisAlignment: .center,
+              children: [
+                if (waitingImagePath != null) _ImagePreview(small: true, imagePath: waitingImagePath),
+                if (waitingImagePath != null) const SizedBox(width: 4),
+                Text(
+                  waitingText,
+                  style: const TS(s: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

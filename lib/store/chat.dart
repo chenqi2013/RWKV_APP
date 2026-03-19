@@ -1,5 +1,11 @@
 part of 'p.dart';
 
+enum _UserMessageMenuAction {
+  edit,
+  copy,
+  deleteCurrentBranch,
+}
+
 class _Chat {
   // ===========================================================================
   // Instance
@@ -8,6 +14,8 @@ class _Chat {
   /// The scroll controller of the chat page message list
   late final scrollController = ScrollController();
 
+  late final listAtTop = qs(true);
+
   /// The text editing controller of the chat page input
   late final textEditingController = TextEditingController(text: "");
 
@@ -15,12 +23,15 @@ class _Chat {
   late final focusNode = FocusNode();
 
   late final _sensitiveThrottler = Throttler(milliseconds: 333, trailing: true);
+  late final _liveTokenCountThrottler = Throttler(milliseconds: 997, trailing: true);
+  int _refreshTokenCountEpoch = 0;
 
   // ===========================================================================
   // StateProvider
   // ===========================================================================
 
   late final textInInput = qs("");
+  late final inputBarDebuggerShown = qs(false);
 
   late final prefillPercentage = qs(0.0);
 
@@ -28,6 +39,8 @@ class _Chat {
   late final receivedTokens = qs("");
 
   late final inputHeight = qs(77.0);
+
+  late final ttsBottomHeight = qs(0.0);
 
   late final receiveId = qs<int?>(null);
 
@@ -52,6 +65,12 @@ class _Chat {
   late final batchCount = qs<int>(Argument.batchCount.defaults.toInt());
   late final batchVW = qs<int>(Argument.batchVW.defaults.toInt());
 
+  /// 当前需要在 AppBar 新对话按钮上展示引导的会话 id
+  late final newConversationGuideConversationId = qs<int?>(null);
+
+  /// 已经触发过 token 超限提示的会话集合（纯内存态）
+  late final tokenReminderShownConversationIds = qs<Set<int>>({});
+
   // ===========================================================================
   // Provider
   // ===========================================================================
@@ -68,6 +87,120 @@ extension $Chat on _Chat {
     P.msg._clear();
   }
 
+  Future<void> onDeleteBranchPressed({
+    required Message msg,
+  }) async {
+    if (P.rwkv.generating.q) {
+      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
+      return;
+    }
+
+    final targetNode = P.msg.msgNode.q.findNodeByMsgId(msg.id);
+    final parentNode = targetNode?.parent;
+    if (targetNode == null || parentNode == null) {
+      Alert.warning(S.current.please_select_a_branch_to_continue_the_conversation);
+      return;
+    }
+
+    final siblings = parentNode.children;
+    if (siblings.length <= 1) {
+      return;
+    }
+
+    final targetIndex = siblings.indexWhere((MsgNode node) => node.id == msg.id);
+    if (targetIndex < 0) {
+      Alert.warning(S.current.please_select_a_branch_to_continue_the_conversation);
+      return;
+    }
+
+    final context = getContext();
+    if (context == null) return;
+    final s = S.of(context);
+    final confirmResult = await showOkCancelAlertDialog(
+      context: context,
+      title: s.delete_branch_title,
+      message: s.delete_branch_confirmation_message,
+      okLabel: s.delete,
+      cancelLabel: s.cancel,
+      isDestructiveAction: true,
+    );
+    if (confirmResult != OkCancelResult.ok) return;
+
+    final deletedIds = _collectSubtreeIds(targetNode);
+    final deletedIdSet = deletedIds.toSet();
+
+    parentNode.children.removeAt(targetIndex);
+    if (parentNode.latest?.id == msg.id) {
+      if (parentNode.children.isEmpty) {
+        parentNode.latest = null;
+      } else {
+        final settledIndex = targetIndex >= parentNode.children.length ? parentNode.children.length - 1 : targetIndex;
+        parentNode.latest = parentNode.children[settledIndex];
+      }
+    }
+
+    final nextPool = <int, Message>{...P.msg.pool.q};
+    for (final deletedId in deletedIds) {
+      nextPool.remove(deletedId);
+    }
+    P.msg.pool.q = nextPool;
+
+    P.msg.clearBottomDetailsStateByMessageIds(messageIds: deletedIds);
+    P.msg.clearBottomTokensCountByMessageIds(messageIds: deletedIds);
+
+    final latestClickedMessage = P.msg.latestClicked.q;
+    if (latestClickedMessage != null && deletedIdSet.contains(latestClickedMessage.id)) {
+      P.msg.latestClicked.q = null;
+    }
+
+    final selectedSharingIds = sharingSelectedMsgIds.q;
+    final filteredSharingIds = selectedSharingIds.where((int id) => !deletedIdSet.contains(id)).toSet();
+    if (filteredSharingIds.length != selectedSharingIds.length) {
+      sharingSelectedMsgIds.q = filteredSharingIds;
+    }
+    if (filteredSharingIds.length < 2) {
+      isSharing.q = false;
+    }
+
+    final editingIndex = P.msg.editingOrRegeneratingIndex.q;
+    if (editingIndex != null) {
+      final editingMessage = P.msg.findByIndex(editingIndex);
+      if (editingMessage != null && deletedIdSet.contains(editingMessage.id)) {
+        P.msg.editingOrRegeneratingIndex.q = null;
+      }
+    }
+
+    final currentReceiveId = receiveId.q;
+    if (currentReceiveId != null && deletedIdSet.contains(currentReceiveId)) {
+      receiveId.q = null;
+      receivedTokens.q = "";
+    }
+
+    P.msg.ids.q = P.msg.msgNode.q.latestMsgIdsWithoutRoot;
+    await P.conversation._syncNode();
+
+    try {
+      await P.app._db.deleteMsgsByCreateAtInUS(deletedIds);
+      Alert.success(S.current.delete_finished);
+    } catch (e) {
+      qqe("delete branch failed: $e");
+      Alert.error("Delete failed");
+    }
+  }
+
+  List<int> _collectSubtreeIds(MsgNode rootNode) {
+    final ids = <int>[];
+    final stack = <MsgNode>[rootNode];
+    while (stack.isNotEmpty) {
+      final node = stack.removeLast();
+      ids.add(node.id);
+      for (final child in node.children) {
+        stack.add(child);
+      }
+    }
+    return ids;
+  }
+
   void onSwitchWebSearchMode(WebSearchMode mode) async {
     final receiving = P.rwkv.generating.q;
     if (receiving) {
@@ -80,12 +213,62 @@ extension $Chat on _Chat {
     webSearchMode.q = mode;
   }
 
+  Future<void> onWebSearchModeTapped() async {
+    final receiving = P.rwkv.generating.q;
+    if (receiving) {
+      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
+      return;
+    }
+    if (!checkModelSelection(preferredDemoType: .chat)) return;
+
+    final context = getContext();
+    if (context == null) return;
+
+    P.app.hapticLight();
+
+    final s = S.current;
+    final current = webSearchMode.q;
+    final actionPairs = <({String label, WebSearchMode key})>[
+      (label: s.off, key: .off),
+      (label: s.web_search, key: .search),
+      (label: s.deep_web_search, key: .deepSearch),
+    ];
+
+    final actions = actionPairs.map((entry) {
+      final isCurrent = entry.key == current;
+      final label = isCurrent ? "☑ ${entry.label}" : entry.label;
+      final key = entry.key;
+      return SheetAction(label: label, key: key);
+    }).toList();
+
+    final selectedMode = await showModalActionSheet<WebSearchMode>(
+      context: context,
+      title: s.web_search,
+      message: "${s.web_search} / ${s.deep_web_search}",
+      cancelLabel: s.cancel,
+      actions: actions,
+    );
+
+    if (selectedMode == null) return;
+
+    onSwitchWebSearchMode(selectedMode);
+  }
+
   void onSwitchWenYanWen(WenyanMode mode) async {
     final receiving = P.rwkv.generating.q;
     if (receiving) {
       Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
       return;
     }
+
+    switch (mode) {
+      case .off:
+      case .classic:
+        break;
+      case .mixed:
+        if (batchEnabled.q == false) batchEnabled.q = true;
+    }
+
     if (mode != WenyanMode.off) {
       webSearchMode.q = WebSearchMode.off;
       if (mode == WenyanMode.mixed && P.rwkv.supportedBatchSizes.q.isNotEmpty) {
@@ -94,7 +277,6 @@ extension $Chat on _Chat {
       }
     } else {
       if (wenYanWen.q == WenyanMode.mixed && batchCount.q == 2) {
-        batchCount.q = 1;
         onBatchInferenceSwitchChanged(false);
       }
     }
@@ -102,10 +284,66 @@ extension $Chat on _Chat {
     wenYanWen.q = mode;
   }
 
+  Future<void> onWenYanWenTapped() async {
+    final receiving = P.rwkv.generating.q;
+    if (receiving) {
+      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
+      return;
+    }
+
+    final model = P.rwkv.latestModel.q;
+    if (model == null) {
+      ModelSelector.show();
+      return;
+    }
+
+    final context = getContext();
+    if (context == null) return;
+
+    P.app.hapticLight();
+
+    final currentMode = wenYanWen.q;
+    final actionPairs = <({String label, WenyanMode key})>[
+      (label: "文言: 关", key: .off),
+      (label: "文言: 开", key: .classic),
+      (label: "古今", key: .mixed),
+    ];
+    final actions = actionPairs.map((entry) {
+      final isCurrent = entry.key == currentMode;
+      final label = isCurrent ? "☑ ${entry.label}" : entry.label;
+      final key = entry.key;
+      return SheetAction(label: label, key: key);
+    }).toList();
+
+    final selectedMode = await showModalActionSheet<WenyanMode>(
+      context: context,
+      title: "文言",
+      message: "请选择文言模式",
+      cancelLabel: S.current.cancel,
+      actions: actions,
+    );
+
+    if (selectedMode == null) return;
+
+    if (!model.tags.contains('batch') && selectedMode == WenyanMode.mixed) {
+      Alert.warning(S.current.this_model_does_not_support_batch_inference);
+      return;
+    }
+
+    onSwitchWenYanWen(selectedMode);
+  }
+
   // TODO: 适时去掉 preferredDemoType
   Future<void> onSendButtonPressed({
     required DemoType preferredDemoType,
   }) async {
+    final textToSend = textInInput.q.trim();
+
+    if (P.app.demoType.q == .tts) {
+      await P.talk.gen();
+      return;
+    }
+
     qq;
     if (!checkModelSelection(preferredDemoType: preferredDemoType)) return;
 
@@ -143,7 +381,6 @@ extension $Chat on _Chat {
     }
 
     focusNode.unfocus();
-    final textToSend = textInInput.q.trim();
     textInInput.q = "";
 
     final _editingBotMessage = P.msg.editingBotMessage.q;
@@ -220,6 +457,7 @@ extension $Chat on _Chat {
 
   Future<void> onKeyboardSubmitted(String aString) async {
     qqq(aString);
+    final textToSend = textInInput.q.trim();
 
     final generating = P.rwkv.generating.q;
 
@@ -233,28 +471,31 @@ extension $Chat on _Chat {
       return;
     }
 
-    final textToSend = textInInput.q.trim();
     if (textToSend.isEmpty) return;
     textInInput.q = "";
     focusNode.unfocus();
     await send(textToSend);
   }
 
+  void cancelEditing({bool clearInput = false}) {
+    final editingIndex = P.msg.editingOrRegeneratingIndex.q;
+    if (editingIndex == null && !clearInput) return;
+    P.msg.editingOrRegeneratingIndex.q = null;
+    if (!clearInput) return;
+    textEditingController.clear();
+    textInInput.q = "";
+  }
+
   Future<void> onTapMessageList() async {
     qq;
     focusNode.unfocus();
     P.talk.dismissAllShown();
-    final _editingIndex = P.msg.editingOrRegeneratingIndex.q;
-    if (_editingIndex == null) return;
-    P.msg.editingOrRegeneratingIndex.q = null;
-    textEditingController.value = const TextEditingValue(text: "");
+    cancelEditing(clearInput: true);
   }
 
   Future<void> onTapClearInput() async {
     qq;
-    textEditingController.clear();
-    textInInput.q = "";
-    P.msg.editingOrRegeneratingIndex.q = null;
+    cancelEditing(clearInput: true);
   }
 
   Future<void> onTapEditInUserMessageBubble({required int index}) async {
@@ -263,6 +504,91 @@ extension $Chat on _Chat {
     textEditingController.value = TextEditingValue(text: content);
     focusNode.requestFocus();
     P.msg.editingOrRegeneratingIndex.q = index;
+  }
+
+  void onMessageTapped(Message msg) {
+    if (P.rwkv.currentWorldType.q != null) {
+      Focus.of(getContext()!).unfocus();
+    }
+    focusNode.unfocus();
+    P.talk.dismissAllShown();
+    P.msg.latestClicked.q = msg;
+    if (msg.type == MessageType.ttsGeneration) {
+      if (P.see.playing.q) {
+        P.see.stopPlaying();
+      } else {
+        if (msg.changing) Alert.info(S.current.playing_partial_generated_audio);
+        P.see.play(path: msg.audioUrl!);
+      }
+    }
+  }
+
+  void onCopyUserMessage(Message msg) {
+    Alert.success(S.current.chat_copied_to_clipboard);
+    if (msg.ttsTarget != null) {
+      Clipboard.setData(ClipboardData(text: msg.ttsTarget!.replaceAll(Config.userMsgModifierSep, "").trim()));
+      return;
+    }
+    final content = msg.content.replaceAll(Config.userMsgModifierSep, "").trim();
+    if (content.isEmpty) {
+      Alert.warning("No content to copy");
+      return;
+    }
+    Clipboard.setData(ClipboardData(text: content));
+  }
+
+  Future<void> showUserMessageContextMenu({
+    required BuildContext context,
+    required bool canEdit,
+    required bool canCopy,
+    required int index,
+    required Message msg,
+  }) async {
+    final canDeleteCurrentBranch = P.msg.siblingCount(msg) > 1;
+    if (!canEdit && !canCopy && !canDeleteCurrentBranch) return;
+    if (!P.app.isMobile.q) return;
+
+    final selectedAction = await _showMobileUserMessageMenu(
+      context: context,
+      canEdit: canEdit,
+      canCopy: canCopy,
+      canDeleteCurrentBranch: canDeleteCurrentBranch,
+    );
+    if (selectedAction == null) return;
+
+    if (selectedAction == .edit) {
+      await onTapEditInUserMessageBubble(index: index);
+      return;
+    }
+
+    if (selectedAction == .copy) {
+      onCopyUserMessage(msg);
+      return;
+    }
+
+    if (selectedAction == .deleteCurrentBranch) {
+      await onDeleteBranchPressed(msg: msg);
+    }
+  }
+
+  Future<_UserMessageMenuAction?> _showMobileUserMessageMenu({
+    required BuildContext context,
+    required bool canEdit,
+    required bool canCopy,
+    required bool canDeleteCurrentBranch,
+  }) async {
+    final s = S.of(context);
+    final actions = <SheetAction<_UserMessageMenuAction>>[
+      if (canEdit) SheetAction(label: s.edit, key: .edit),
+      if (canCopy) SheetAction(label: s.copy_text, key: .copy),
+      if (canDeleteCurrentBranch) SheetAction(label: s.delete_current_branch, key: .deleteCurrentBranch),
+    ];
+
+    return showModalActionSheet<_UserMessageMenuAction>(
+      context: context,
+      cancelLabel: s.cancel,
+      actions: actions,
+    );
   }
 
   Future<void> onTapEditInBotMessageBubble({required int index}) async {
@@ -307,9 +633,15 @@ extension $Chat on _Chat {
     if (P.rwkv.generating.q) await onStopButtonPressed();
     await 100.msLater;
     // Alert.success(S.current.new_chat_started);
+    dismissNewConversationGuide();
     P.msg._clear();
     P.rwkv.clearStates();
     P.conversation.currentCreatedAtUS.q = P.msg.msgNode.q.createAtInUS;
+  }
+
+  void dismissNewConversationGuide() {
+    if (newConversationGuideConversationId.q == null) return;
+    newConversationGuideConversationId.q = null;
   }
 
   void toggleCompletionMode() {
@@ -432,6 +764,8 @@ extension $Chat on _Chat {
       return;
     }
 
+    P.msg.clearBottomDetailsStateInScope(scope: "chat_bot_message_bottom");
+
     final receiveId = HF.milliseconds + 1;
     this.receiveId.q = receiveId;
 
@@ -441,6 +775,7 @@ extension $Chat on _Chat {
 
     receivedTokens.q = "";
     P.rwkv.generating.q = true;
+    _liveTokenCountThrottler.cancel();
 
     final receiveMsg = Message(
       id: receiveId,
@@ -450,13 +785,14 @@ extension $Chat on _Chat {
       paused: false,
       modelName: currentModel.name,
       runningMode: thinkingMode.toString(),
-      rawDecodeParams: P.rwkv.backendBatchParams.q.rawDecodeParams,
+      rawDecodeParams: _resolveDecodeParamsSnapshotRaw(),
     );
 
     P.msg.pool.q[receiveId] = receiveMsg;
     parentNode.add(MsgNode(receiveId));
     P.msg.ids.q = P.msg.msgNode.q.latestMsgIdsWithoutRoot;
     P.conversation._syncNode();
+    _scheduleRefreshLiveTokenCounts(messageId: receiveId, liveBotContent: "");
 
     history = withHistory ? await _historyWithWebSearch(receiveId, history) : [message];
     final inSee = P.app.pageKey.q == .see;
@@ -487,13 +823,16 @@ extension $Chat on _Chat {
   Future<void> resumeMessageById({required int id, bool withHaptic = true}) async {
     qq;
     if (withHaptic) P.app.hapticLight();
-    P.rwkv.sendMessages(_history(), batchSize: batchEnabled.q ? batchCount.q : 1);
+    receiveId.q = id;
     _updateMessageById(
       id: id,
       changing: true,
       paused: false,
       callingFunction: "resumeMessageById",
     );
+    _liveTokenCountThrottler.cancel();
+    P.rwkv.sendMessages(_history(), batchSize: batchEnabled.q ? batchCount.q : 1);
+    _scheduleRefreshLiveTokenCounts(messageId: id, liveBotContent: receivedTokens.q);
   }
 
   Future<void> onBatchInferenceSwitchChanged(bool value) async {
@@ -511,7 +850,7 @@ extension $Chat on _Chat {
     final frequencyPenalty = P.rwkv.arguments(Argument.frequencyPenalty).q;
     final penaltyDecay = P.rwkv.arguments(Argument.penaltyDecay).q;
 
-    final List<SamplerAndPenaltyParam> newValue = List.generate(
+    final newValue = List<SamplerAndPenaltyParam>.generate(
       100,
       (index) => SamplerAndPenaltyParam(
         temperature: temperature,
@@ -588,6 +927,39 @@ extension _$Chat on _Chat {
     P.rwkv.supportedBatchSizes.l(_onSupportedBatchSizesChanged);
 
     batchCount.l(_onBatchCountChanged);
+
+    scrollController.addListener(_onScroll);
+    P.msg.ids.l(_onMessageIdsChangedForTokenCount);
+    _onMessageIdsChangedForTokenCount(P.msg.ids.q);
+  }
+
+  void _onScroll() async {
+    if (scrollController.hasClients == false) return;
+    final position = scrollController.position;
+    final extentAfter = position.extentAfter;
+    if (extentAfter > 0) {
+      listAtTop.q = false;
+    } else {
+      listAtTop.q = true;
+    }
+  }
+
+  void _onConversationTokenCountObserved({
+    required int? conversationTokensCount,
+  }) {
+    if (conversationTokensCount == null) return;
+    if (conversationTokensCount < Config.newConversationTokenReminderThreshold) return;
+
+    final conversationId = P.msg.msgNode.q.createAtInUS;
+    final shownConversationIds = tokenReminderShownConversationIds.q;
+    if (shownConversationIds.contains(conversationId)) return;
+
+    tokenReminderShownConversationIds.q = {
+      ...shownConversationIds,
+      conversationId,
+    };
+    newConversationGuideConversationId.q = conversationId;
+    Alert.info(S.current.conversation_token_limit_recommend_new_chat);
   }
 
   void _onBatchCountChanged(int value) async {
@@ -702,8 +1074,6 @@ extension _$Chat on _Chat {
   Future<void> _pauseMessageById({required int id, bool isSensitive = false}) async {
     qq;
 
-    P.rwkv.stop();
-
     final msg = P.msg.pool.q[id];
     if (msg == null) {
       qqw("message not found");
@@ -715,8 +1085,31 @@ extension _$Chat on _Chat {
       return;
     }
 
-    final newMsg = msg.copyWith(paused: true, isSensitive: isSensitive);
+    final (double? snapshotPrefillSpeed, double? snapshotDecodeSpeed) = _currentSpeedSnapshotForStore();
+    final finalPrefillSpeed = snapshotPrefillSpeed ?? msg.prefillSpeed;
+    final finalDecodeSpeed = snapshotDecodeSpeed ?? msg.decodeSpeed;
+    final currentGeneratedContent = id == receiveId.q ? receivedTokens.q : msg.content;
+    final finalizedContent = currentGeneratedContent.isNotEmpty ? currentGeneratedContent : msg.content;
+
+    _liveTokenCountThrottler.cancel();
+    P.rwkv.stop();
+
+    final newMsg = msg.copyWith(
+      content: finalizedContent,
+      paused: true,
+      changing: false,
+      isSensitive: isSensitive,
+      prefillSpeed: finalPrefillSpeed,
+      decodeSpeed: finalDecodeSpeed,
+    );
     P.msg._syncMsg(id, newMsg);
+    unawaited(
+      _refreshTokenCountsForMessage(
+        messageId: id,
+        overrideBotContent: finalizedContent,
+        persistToMessage: true,
+      ),
+    );
   }
 
   Future<void> _onFocusNodeChanged() async {
@@ -783,22 +1176,77 @@ extension _$Chat on _Chat {
     final pageKey = P.app.pageKey.q;
     if (pageKey == .translator || pageKey == .ocr || pageKey == .benchmark || pageKey == .completion) return;
     qqq("callingFunction: $callingFunction");
+    _liveTokenCountThrottler.cancel();
 
     final id = receiveId.q;
 
     if (id == null) {
-      qqe("receiveId is null");
+      qqw("receiveId is null");
+      return;
+    }
+
+    if (id == Config.chatPrefillId) return;
+
+    final currentMessage = P.msg.pool.q[id];
+    if (currentMessage == null) {
+      qqe("message not found when fully received: $id");
+      return;
+    }
+
+    if (!currentMessage.changing) {
+      qqq("skip fullyReceived for non-changing message: $id");
       return;
     }
 
     final receivedTokens = this.receivedTokens.q;
+    final (double? snapshotPrefillSpeed, double? snapshotDecodeSpeed) = _currentSpeedSnapshotForStore();
+    final finalPrefillSpeed = snapshotPrefillSpeed ?? currentMessage.prefillSpeed;
+    final finalDecodeSpeed = snapshotDecodeSpeed ?? currentMessage.decodeSpeed;
 
     _updateMessageById(
       id: id,
       content: receivedTokens,
       changing: false,
+      prefillSpeed: finalPrefillSpeed,
+      decodeSpeed: finalDecodeSpeed,
       callingFunction: callingFunction,
     );
+    unawaited(
+      _refreshTokenCountsForMessage(
+        messageId: id,
+        overrideBotContent: receivedTokens,
+        persistToMessage: true,
+      ),
+    );
+
+    _prefillAfterReply();
+  }
+
+  static final _thinkTagRegex = RegExp(r'<think>[\s\S]*?</think>');
+
+  void _prefillAfterReply() {
+    final pageKey = P.app.pageKey.q;
+    if (pageKey != .chat) return;
+
+    final messages = P.msg.list.q.where((msg) => msg.type == MessageType.text).toList();
+    if (messages.isEmpty) return;
+    if (messages.length % 2 != 0) return;
+
+    final history = <String>[];
+    for (int i = 0; i < messages.length; i += 2) {
+      final userMsg = messages[i];
+      final botMsg = i + 1 < messages.length ? messages[i + 1] : null;
+
+      history.add(userMsg.getContentForHistoryWithRef(botMsg?.reference));
+
+      if (botMsg != null) {
+        final content = botMsg.content.replaceAll(_thinkTagRegex, '').trim();
+        history.add(content);
+      }
+    }
+
+    receiveId.q = Config.chatPrefillId;
+    P.rwkv.sendMessages(history, maxLength: 0);
   }
 
   /// Update a message by id
@@ -817,10 +1265,11 @@ extension _$Chat on _Chat {
     bool? paused,
     String? callingFunction,
     bool? isSensitive,
-    double? ttsOverallProgress,
-    List<double>? ttsPerWavProgress,
-    List<String>? ttsFilePaths,
     RefInfo? reference,
+    double? prefillSpeed,
+    double? decodeSpeed,
+    int? messageTokensCount,
+    int? conversationTokensCount,
   }) {
     if (completionMode.q) {
       return;
@@ -828,6 +1277,11 @@ extension _$Chat on _Chat {
 
     if (id == Config.seePrefillId) {
       qqw("see prefill id: $id");
+      return;
+    }
+
+    if (id == Config.chatPrefillId) {
+      qqw("chat prefill id: $id");
       return;
     }
 
@@ -849,15 +1303,198 @@ extension _$Chat on _Chat {
       isReasoning: isReasoning,
       paused: paused,
       isSensitive: isSensitive,
-      ttsOverallProgress: ttsOverallProgress,
-      ttsPerWavProgress: ttsPerWavProgress,
-      ttsFilePaths: ttsFilePaths,
+      prefillSpeed: prefillSpeed,
+      decodeSpeed: decodeSpeed,
+      messageTokensCount: messageTokensCount,
+      conversationTokensCount: conversationTokensCount,
     );
     P.msg._syncMsg(id, newMsg);
   }
 
+  (double? prefillSpeed, double? decodeSpeed) _currentSpeedSnapshotForStore() {
+    final currentPrefillSpeed = P.rwkv.prefillSpeed.q;
+    final currentDecodeSpeed = P.rwkv.decodeSpeed.q;
+    final snapshotPrefillSpeed = currentPrefillSpeed > 0 ? currentPrefillSpeed : null;
+    final snapshotDecodeSpeed = currentDecodeSpeed > 0 ? currentDecodeSpeed : null;
+    return (snapshotPrefillSpeed, snapshotDecodeSpeed);
+  }
+
+  void _onMessageIdsChangedForTokenCount(List<int> messageIds) {
+    _refreshTokenCountEpoch = _refreshTokenCountEpoch + 1;
+    final epoch = _refreshTokenCountEpoch;
+    unawaited(_refreshMissingTokenCountsForMessages(messageIds: messageIds, epoch: epoch));
+  }
+
+  Future<void> _refreshMissingTokenCountsForMessages({
+    required List<int> messageIds,
+    required int epoch,
+  }) async {
+    for (final messageId in messageIds) {
+      if (epoch != _refreshTokenCountEpoch) return;
+      final message = P.msg.pool.q[messageId];
+      if (message == null || message.isMine || message.type != MessageType.text) continue;
+      final existingMessageCount = P.msg.getBottomMessageTokensCount(messageId: messageId);
+      final existingConversationCount = P.msg.getBottomConversationTokensCount(messageId: messageId);
+      final persistedMessageCount = message.messageTokensCount;
+      final persistedConversationCount = message.conversationTokensCount;
+      final hasCachedCount = existingMessageCount != null && existingConversationCount != null;
+      final hasPersistedCount = persistedMessageCount != null && persistedConversationCount != null;
+      if (hasCachedCount || hasPersistedCount) {
+        final observedConversationCount = persistedConversationCount ?? existingConversationCount;
+        _onConversationTokenCountObserved(conversationTokensCount: observedConversationCount);
+        if (!message.changing && hasPersistedCount && !hasCachedCount) {
+          P.msg.setBottomTokensCount(
+            messageId: messageId,
+            messageTokensCount: persistedMessageCount,
+            conversationTokensCount: persistedConversationCount,
+          );
+        }
+        continue;
+      }
+      final overrideBotContent = message.changing && receiveId.q == messageId ? receivedTokens.q : null;
+      await _refreshTokenCountsForMessage(
+        messageId: messageId,
+        overrideBotContent: overrideBotContent,
+        persistToMessage: !message.changing,
+      );
+    }
+  }
+
+  void _scheduleRefreshLiveTokenCounts({
+    required int messageId,
+    required String liveBotContent,
+  }) {
+    _liveTokenCountThrottler.call(() {
+      final latestMessage = P.msg.pool.q[messageId];
+      if (latestMessage == null || !latestMessage.changing) return;
+      unawaited(_refreshTokenCountsForMessage(messageId: messageId, overrideBotContent: liveBotContent));
+    });
+  }
+
+  Future<void> _refreshTokenCountsForMessage({
+    required int messageId,
+    String? overrideBotContent,
+    bool persistToMessage = false,
+  }) async {
+    final message = P.msg.pool.q[messageId];
+    if (message == null || message.isMine || message.type != MessageType.text) return;
+
+    String botContent = overrideBotContent ?? message.content;
+    if (botContent.isEmpty && messageId == receiveId.q) {
+      botContent = receivedTokens.q;
+    }
+
+    final history = _historyForTokenCountUntilMessage(
+      messageId: messageId,
+      overrideBotContent: botContent,
+    );
+    if (history == null || history.isEmpty) return;
+
+    final counts = await Future.wait([
+      P.rwkv.calculateTokensCountRaw(text: botContent),
+      P.rwkv.calculateTokensCountFromMessages(messages: history),
+    ]);
+    final messageTokensCount = counts[0];
+    final conversationTokensCount = counts[1];
+    if (messageTokensCount == null && conversationTokensCount == null) return;
+    final latestMessage = P.msg.pool.q[messageId];
+    if (latestMessage == null) return;
+    final observedConversationTokensCount = conversationTokensCount ?? latestMessage.conversationTokensCount;
+    _onConversationTokenCountObserved(conversationTokensCount: observedConversationTokensCount);
+
+    P.msg.setBottomTokensCount(
+      messageId: messageId,
+      messageTokensCount: messageTokensCount,
+      conversationTokensCount: conversationTokensCount,
+    );
+
+    if (!persistToMessage) return;
+
+    final resolvedMessageTokensCount = messageTokensCount ?? latestMessage.messageTokensCount;
+    final resolvedConversationTokensCount = conversationTokensCount ?? latestMessage.conversationTokensCount;
+    if (resolvedMessageTokensCount == null && resolvedConversationTokensCount == null) return;
+
+    final noMessageCountChanges = resolvedMessageTokensCount == latestMessage.messageTokensCount;
+    final noConversationCountChanges = resolvedConversationTokensCount == latestMessage.conversationTokensCount;
+    if (noMessageCountChanges && noConversationCountChanges) return;
+
+    final updatedMessage = latestMessage.copyWith(
+      messageTokensCount: resolvedMessageTokensCount,
+      conversationTokensCount: resolvedConversationTokensCount,
+    );
+    await P.msg._syncMsg(messageId, updatedMessage);
+  }
+
+  List<String>? _historyForTokenCountUntilMessage({
+    required int messageId,
+    String? overrideBotContent,
+  }) {
+    final targetNode = P.msg.msgNode.q.findNodeByMsgId(messageId);
+    if (targetNode == null) return null;
+    final idsFromTargetToRoot = P.msg.msgNode.q.msgIdsFrom(targetNode);
+    final orderedPathIds = idsFromTargetToRoot.reversed.where((int id) => id != 0).toList();
+    if (orderedPathIds.isEmpty) return null;
+
+    final scopedMessages = <Message>[];
+    for (final id in orderedPathIds) {
+      final pathMessage = P.msg.pool.q[id];
+      if (pathMessage == null) continue;
+      if (pathMessage.type != MessageType.text) continue;
+      scopedMessages.add(pathMessage);
+    }
+    if (scopedMessages.isEmpty) return null;
+
+    final history = <String>[];
+    final isSingleTurnPath = scopedMessages.length == 2 && scopedMessages.first.isMine;
+    if (isSingleTurnPath) {
+      final template = P.preference.promptTemplate.newChatTemplate.trim();
+      if (template.isNotEmpty) {
+        final templateMessages = template.split("\n\n").where((String entry) => entry.isNotEmpty).toList();
+        history.addAll(templateMessages);
+      }
+    }
+    for (int i = 0; i < scopedMessages.length; i = i + 2) {
+      final Message userMsg = scopedMessages[i];
+      final Message? botMsg = i + 1 < scopedMessages.length ? scopedMessages[i + 1] : null;
+
+      String userContent = userMsg.getContentForHistoryWithRef(botMsg?.reference);
+      if (wenYanWen.q == WenyanMode.classic) {
+        userContent = "$userContent 请用文言文回答。";
+      }
+      history.add(userContent);
+
+      if (botMsg == null) continue;
+
+      String botContent = botMsg.getHistoryContent();
+      if (botMsg.id == messageId && overrideBotContent != null) {
+        botContent = overrideBotContent;
+      }
+      history.add(botContent);
+    }
+    return history;
+  }
+
+  String? _resolveDecodeParamsSnapshotRaw() {
+    final backendParams = P.rwkv.backendBatchParams.q;
+    if (backendParams.isNotEmpty) return backendParams.rawDecodeParams;
+
+    final frontendParams = P.rwkv.frontendBatchParams.q;
+    if (frontendParams.isNotEmpty) return frontendParams.rawDecodeParams;
+
+    final currentParam = SamplerAndPenaltyParam(
+      temperature: P.rwkv.arguments(Argument.temperature).q,
+      topP: P.rwkv.arguments(Argument.topP).q,
+      presencePenalty: P.rwkv.arguments(Argument.presencePenalty).q,
+      frequencyPenalty: P.rwkv.arguments(Argument.frequencyPenalty).q,
+      penaltyDecay: P.rwkv.arguments(Argument.penaltyDecay).q,
+    );
+    return <SamplerAndPenaltyParam>[currentParam].rawDecodeParams;
+  }
+
   @Deprecated("Use _onStreamEvent instead")
   void _onOldStreamEvent(LLMEvent event) {
+    if (P.askQuestion.interceptingEvents.q) return;
+
     switch (event.type) {
       case _RWKVMessageType.isGenerating:
         final isGenerating = event.content == "true";
@@ -878,11 +1515,19 @@ extension _$Chat on _Chat {
   void _onStreamEvent(from_rwkv.FromRWKV event) {
     final pageKey = P.app.pageKey.q;
     if (pageKey == .translator) return;
+    if (P.askQuestion.interceptingEvents.q) return;
 
     switch (event) {
       case from_rwkv.ResponseBufferContent res:
         receivedTokens.q = res.responseBufferContent;
         if (completionMode.q) return;
+        final currentReceiveId = receiveId.q;
+        if (currentReceiveId != null) {
+          _scheduleRefreshLiveTokenCounts(
+            messageId: currentReceiveId,
+            liveBotContent: res.responseBufferContent,
+          );
+        }
         _sensitiveThrottler.call(() {
           _checkSensitive(res.responseBufferContent);
         });
@@ -892,6 +1537,13 @@ extension _$Chat on _Chat {
         final responseBufferContent = res.responseBufferContent.join(Config.batchMarker) + Config.batchMarker + "-1";
         receivedTokens.q = responseBufferContent;
         if (completionMode.q) return;
+        final currentReceiveId = receiveId.q;
+        if (currentReceiveId != null) {
+          _scheduleRefreshLiveTokenCounts(
+            messageId: currentReceiveId,
+            liveBotContent: responseBufferContent,
+          );
+        }
         _sensitiveThrottler.call(() {
           _checkSensitive(responseBufferContent);
         });
@@ -916,6 +1568,7 @@ extension _$Chat on _Chat {
     final pageKey = P.app.pageKey.q;
     if (pageKey == .translator) return;
     qq;
+    _liveTokenCountThrottler.cancel();
     final demoType = P.app.demoType.q;
     if (demoType != .chat && demoType != .see) return;
     P.rwkv.generating.q = false;
@@ -925,6 +1578,7 @@ extension _$Chat on _Chat {
     final pageKey = P.app.pageKey.q;
     if (pageKey == .translator) return;
     qqe("error: $error");
+    _liveTokenCountThrottler.cancel();
     if (!kDebugMode) Sentry.captureException(error, stackTrace: stackTrace);
     final demoType = P.app.demoType.q;
     if (demoType != .chat && demoType != .see) return;

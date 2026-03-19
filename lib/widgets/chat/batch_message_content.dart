@@ -1,8 +1,13 @@
-import 'package:adaptive_dialog/adaptive_dialog.dart';
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:adaptive_dialog/adaptive_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
+
+// Project imports:
 import 'package:zone/func/extract_thought_and_output_for_batch_inference.dart';
 import 'package:zone/func/get_batch_info.dart';
 import 'package:zone/gen/l10n.dart';
@@ -45,8 +50,8 @@ class _BatchMessageContentState extends ConsumerState<BatchMessageContent> {
   void _updateButtonsVisibility() {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
-    final bool left = position.pixels > 0.5;
-    final bool right = position.pixels < (position.maxScrollExtent - 0.5);
+    final left = position.pixels > 0.5;
+    final right = position.pixels < (position.maxScrollExtent - 0.5);
     if (left != _showLeft || right != _showRight) {
       setState(() {
         _showLeft = left;
@@ -58,7 +63,7 @@ class _BatchMessageContentState extends ConsumerState<BatchMessageContent> {
   Future<void> _scrollBy(double delta) async {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
-    final double target = (position.pixels + delta).clamp(0.0, position.maxScrollExtent);
+    final target = (position.pixels + delta).clamp(0.0, position.maxScrollExtent);
     if ((target - position.pixels).abs() < 0.5) return;
     await _scrollController.animateTo(
       target,
@@ -77,7 +82,7 @@ class _BatchMessageContentState extends ConsumerState<BatchMessageContent> {
     final qb = ref.watch(P.app.qb);
     final batchSelection = ref.watch(P.msg.batchSelection(widget.msg));
 
-    final double step = screenWidth * (batchVW / 100) * 0.9;
+    final step = screenWidth * (batchVW / 100) * 0.9;
 
     final qw = ref.watch(P.app.qw);
 
@@ -92,7 +97,6 @@ class _BatchMessageContentState extends ConsumerState<BatchMessageContent> {
             mainAxisAlignment: .start,
             crossAxisAlignment: .start,
             children: [
-              const SizedBox(width: 4),
               for (var i = 0; i < batchCount; i++)
                 GD(
                   onTap: () {
@@ -178,6 +182,7 @@ class _BatchMessageContentState extends ConsumerState<BatchMessageContent> {
 
 class _MarkdownBody extends ConsumerWidget {
   final String data;
+
   final SamplerAndPenaltyParam? decodeParam;
 
   const _MarkdownBody({required this.data, this.decodeParam});
@@ -206,7 +211,7 @@ class _MarkdownBody extends ConsumerWidget {
 
     final s = S.of(context);
 
-    final displayText = s.decode_param + s.hyphen + decodeParam!.displayName;
+    final displayText = s.decode_param + s.hyphen + (decodeParam?.displayName ?? "unknown");
 
     final Widget? decodeParamWidget = decodeParam != null
         ? Align(
@@ -230,7 +235,7 @@ class _MarkdownBody extends ConsumerWidget {
         crossAxisAlignment: .stretch,
         children: [
           ?decodeParamWidget,
-          MarkdownRender(raw: output),
+          MarkdownRender(raw: output, useMessageLineHeight: true),
         ],
       );
     }
@@ -239,9 +244,9 @@ class _MarkdownBody extends ConsumerWidget {
       crossAxisAlignment: .stretch,
       children: [
         ?decodeParamWidget,
-        if (thought.isNotEmpty) MarkdownRender(raw: thought, color: qb.q(.55)),
+        if (thought.isNotEmpty) MarkdownRender(raw: thought, color: qb.q(.55), useMessageLineHeight: true),
         if (output.isNotEmpty) const SizedBox(height: 4),
-        if (output.isNotEmpty) MarkdownRender(raw: output),
+        if (output.isNotEmpty) MarkdownRender(raw: output, useMessageLineHeight: true),
       ],
     );
   }

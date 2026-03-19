@@ -1,11 +1,19 @@
 part of 'p.dart';
 
+enum _KeepScreenAwakeReason {
+  generation,
+  download,
+}
+
 class _App extends RawApp {
   // ===========================================================================
   // Instance
   // ===========================================================================
 
   late final db.AppDatabase _db;
+  bool _screenAwakeApplied = false;
+  bool _screenAwakeSyncing = false;
+  bool _screenAwakeNeedsSync = false;
 
   // ===========================================================================
   // Getters
@@ -21,7 +29,7 @@ class _App extends RawApp {
   }
 
   SystemUiOverlayStyle get systemOverlayStyleDark {
-    final scaffold = customTheme.q.scaffold;
+    final scaffold = theme.q.scaffoldBg;
     return SystemUiOverlayStyle(
       systemNavigationBarColor: scaffold,
       systemNavigationBarIconBrightness: Brightness.light,
@@ -31,6 +39,7 @@ class _App extends RawApp {
   }
 
   String get _configForAllDemosKey => "configForAllDemosKey_${buildNumber.q}";
+  static const String officialDownloadPageUrl = "https://rwkv.halowang.cloud/";
 
   @override
   BuildContext? get context => getContext();
@@ -53,10 +62,12 @@ class _App extends RawApp {
   final _isDesktop = qs(false);
   final _isMobile = qs(true);
 
+  late final osVersion = qs(Platform.operatingSystemVersion);
+
   late final featureRollout = qs<FeatureRollout>(const FeatureRollout());
 
   /// 当前应用的主题
-  late final customTheme = qs<custom_theme.CustomTheme>(.light);
+  late final theme = qs<app_theme.AppTheme>(.light);
 
   /// 当前在第几个 tab
   late final tabIndex = qs(0);
@@ -87,6 +98,7 @@ class _App extends RawApp {
   late final checkingLatestVersion = qs(false);
   late final latestVersionInfo = qs<VersionInfo?>(null);
   late final releaseNotesContent = qs<({String? content, String? version})?>(null);
+  late final _keepScreenAwakeReasons = qs<Set<_KeepScreenAwakeReason>>({});
 
   // ===========================================================================
   // Provider
@@ -96,6 +108,12 @@ class _App extends RawApp {
 
   late final isDesktop = qp((ref) => ref.watch(_isDesktop));
   late final isMobile = qp((ref) => ref.watch(_isMobile));
+  late final keepingScreenAwake = qp((ref) => ref.watch(_keepScreenAwakeReasons).isNotEmpty);
+
+  late final osVersionNumbers = qp<List<int>>((ref) {
+    final osVersion = ref.watch(this.osVersion);
+    return _extractOsVersionNumbers(osVersion);
+  });
 }
 
 /// Public methods
@@ -156,9 +174,20 @@ extension $App on _App {
     if (_isMobile.q) Gaimon.medium();
   }
 
+  void setKeepScreenAwakeForReason({
+    required _KeepScreenAwakeReason reason,
+    required bool enabled,
+  }) {
+    final nextReasons = {..._keepScreenAwakeReasons.q};
+    final changed = enabled ? nextReasons.add(reason) : nextReasons.remove(reason);
+    if (!changed) return;
+    _keepScreenAwakeReasons.q = nextReasons;
+    unawaited(_syncKeepScreenAwake());
+  }
+
   Future<void> customThemeChanged() async {
     await 100.msLater;
-    if (customTheme.q.isLight) {
+    if (theme.q.isLight) {
       _statusBarToLightMode();
     } else {
       _statusBarToDarkMode();
@@ -168,6 +197,7 @@ extension $App on _App {
   void checkUpdates({bool manually = false}) async {
     qr;
     checkingLatestVersion.q = true;
+    releaseNotesContent.q = null;
     VersionInfo? latestVersionInfo;
     try {
       latestVersionInfo = await _getLatestVersionInfo();
@@ -182,18 +212,19 @@ extension $App on _App {
     qqr("latest version info: $latestVersionInfo");
     if (latestVersionInfo == null) {
       if (manually) Alert.info(S.current.app_is_already_up_to_date);
-      if (manually) await VersionInfoPanel.show(isLatest: true);
+      if (manually) await _showCurrentVersionInfoPanel();
       return;
     }
 
     this.latestVersionInfo.q = latestVersionInfo;
 
     final latestBuild = latestVersionInfo.build;
+    final currentBuild = int.tryParse(buildNumber.q) ?? 0;
 
     if (!Args.forceShowNewVersionPanel) {
-      if (latestBuild <= int.parse(buildNumber.q)) {
+      if (latestBuild <= currentBuild) {
         if (manually) Alert.info(S.current.app_is_already_up_to_date);
-        if (manually) await VersionInfoPanel.show(isLatest: true);
+        if (manually) await _showCurrentVersionInfoPanel();
         return;
       }
     }
@@ -203,6 +234,25 @@ extension $App on _App {
     getReleaseNotes(build: latestBuild, version: latestVersionInfo.version);
 
     await VersionInfoPanel.show();
+  }
+
+  Future<void> _showCurrentVersionInfoPanel() async {
+    releaseNotesContent.q = null;
+
+    final currentBuild = int.tryParse(buildNumber.q);
+    if (currentBuild == null) {
+      latestVersionInfo.q = null;
+      await VersionInfoPanel.show(isLatest: true);
+      return;
+    }
+
+    latestVersionInfo.q = VersionInfo(
+      type: 'current',
+      url: '',
+      version: version.q,
+      build: currentBuild,
+    );
+    await VersionInfoPanel.show(isLatest: true);
   }
 
   void onTabSelected(int index) {
@@ -230,16 +280,7 @@ extension $App on _App {
       return;
     }
 
-    try {
-      await launchUrl(
-        Uri.parse("https://rwkv.halowang.cloud/"),
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (e) {
-      qqe(e);
-      // Alert.error(S.current.failed_to_open_url);
-      // Sentry.captureException(e, stackTrace: StackTrace.current);
-    }
+    await _openOfficialDownloadPage();
   }
 
   /// Convert Language enum to locale string for API
@@ -263,7 +304,7 @@ extension $App on _App {
     final currentLanguage = P.preference.preferredLanguage.q;
     final locale = _languageToLocaleString(currentLanguage);
 
-    final baseUrl = "${Config.apiv2}/distributions/release-notes";
+    final baseUrl = "${Config.domain}/distributions/release-notes";
     var fullUrl = "$baseUrl?build=$build&locale=${Uri.encodeComponent(locale)}";
     if (version != null && version.isNotEmpty) {
       fullUrl = "$fullUrl&version=${Uri.encodeComponent(version)}";
@@ -300,8 +341,22 @@ extension _$App on _App {
 
     _isDesktop.q = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     _isMobile.q = Platform.isAndroid || Platform.isIOS;
+    if (Platform.isIOS) {
+      try {
+        final info = await DeviceInfoPlugin().iosInfo;
+        final systemVersion = info.systemVersion.trim();
+        if (systemVersion.isNotEmpty) {
+          osVersion.q = systemVersion;
+        }
+      } catch (e) {
+        qqe("Failed to get iOS system version: $e");
+      }
+    } else {
+      osVersion.q = Platform.operatingSystemVersion;
+    }
 
     await init();
+    unawaited(_warnIfWindowsBuildArchitectureMismatched());
 
     // On Windows, use AppData instead of Documents for sandbox-like behavior
     if (Platform.isWindows) {
@@ -369,21 +424,21 @@ extension _$App on _App {
 
     if (Args.debuggingThemes) {
       Timer.periodic(const Duration(seconds: 1), (timer) {
-        final theme = customTheme.q;
+        final theme = this.theme.q;
         switch (theme) {
           case .light:
-            customTheme.q = P.preference.preferredDarkCustomTheme.q;
+            this.theme.q = P.preference.preferredDarkCustomTheme.q;
           case .dim:
           case .lightsOut:
-            customTheme.q = .light;
+            this.theme.q = .light;
         }
-        preferredThemeMode.q = customTheme.q.isLight ? ThemeMode.light : ThemeMode.dark;
+        preferredThemeMode.q = this.theme.q.isLight ? ThemeMode.light : ThemeMode.dark;
       });
     }
 
     preferredThemeMode.q = P.preference.themeMode.q;
-    customTheme.q = P.preference.preferredDarkCustomTheme.q;
-    customTheme.lv(customThemeChanged, fireImmediately: true);
+    theme.q = P.preference.preferredDarkCustomTheme.q;
+    theme.lv(customThemeChanged, fireImmediately: true);
     preferredThemeMode.lv(_syncTheme, fireImmediately: true);
     light.lv(_syncTheme, fireImmediately: true);
     P.preference.preferredDarkCustomTheme.lv(_syncTheme, fireImmediately: true);
@@ -412,6 +467,10 @@ extension _$App on _App {
       checkUpdates();
     });
 
+    2000.msLater.then((_) async {
+      if (Args.autoPushTestPage) push(.test2);
+    });
+
     deleteOutdatedConfigInPreference();
   }
 
@@ -430,15 +489,15 @@ extension _$App on _App {
     final preferredDarkCustomTheme = P.preference.preferredDarkCustomTheme.q;
     switch (preferredThemeMode) {
       case ThemeMode.light:
-        customTheme.q = .light;
+        theme.q = .light;
       case ThemeMode.dark:
-        customTheme.q = preferredDarkCustomTheme;
+        theme.q = preferredDarkCustomTheme;
       case ThemeMode.system:
         switch (light) {
           case true:
-            customTheme.q = .light;
+            theme.q = .light;
           case false:
-            customTheme.q = preferredDarkCustomTheme;
+            theme.q = preferredDarkCustomTheme;
         }
     }
   }
@@ -448,8 +507,37 @@ extension _$App on _App {
   }
 
   Future<void> _statusBarToDarkMode() async {
-    qq;
     SystemChrome.setSystemUIOverlayStyle(systemOverlayStyleDark);
+  }
+
+  Future<void> _syncKeepScreenAwake() async {
+    if (_screenAwakeSyncing) {
+      _screenAwakeNeedsSync = true;
+      return;
+    }
+
+    _screenAwakeSyncing = true;
+    while (true) {
+      _screenAwakeNeedsSync = false;
+      final shouldKeepScreenAwake = _keepScreenAwakeReasons.q.isNotEmpty;
+      if (_screenAwakeApplied != shouldKeepScreenAwake) {
+        try {
+          if (_isMobile.q) {
+            await WakelockPlus.toggle(enable: shouldKeepScreenAwake);
+          }
+          _screenAwakeApplied = shouldKeepScreenAwake;
+        } catch (e) {
+          qqe("Failed to toggle wakelock: $e");
+          if (!kDebugMode) {
+            Sentry.captureException(e, stackTrace: StackTrace.current);
+          }
+        }
+      }
+      if (!_screenAwakeNeedsSync) {
+        break;
+      }
+    }
+    _screenAwakeSyncing = false;
   }
 
   Future<void> _onLifecycleStateChanged() async {}
@@ -498,6 +586,133 @@ extension _$App on _App {
     return null;
   }
 
+  Future<void> _warnIfWindowsBuildArchitectureMismatched() async {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    await 2000.msLater;
+
+    final buildArchitecture = _getWindowsBuildArchitecture();
+    if (buildArchitecture != 'arm64') {
+      return;
+    }
+
+    final operatingSystemArchitecture = _getWindowsOperatingSystemArchitecture();
+    if (operatingSystemArchitecture != 'x64') {
+      return;
+    }
+
+    final buildArchitectureLabel = buildArchitecture.toUpperCase();
+    final operatingSystemArchitectureLabel = operatingSystemArchitecture.toUpperCase();
+    qqw("Windows architecture mismatch detected. build=$buildArchitecture os=$operatingSystemArchitecture");
+
+    await WidgetsBinding.instance.endOfFrame;
+    await 300.msLater;
+
+    final s = S.current;
+    final warningMessage = s.windows_architecture_mismatch_warning(
+      buildArchitectureLabel,
+      operatingSystemArchitectureLabel,
+      _App.officialDownloadPageUrl,
+    );
+    Alert.warning(warningMessage);
+
+    final context = getContext();
+    if (context == null || !context.mounted) {
+      return;
+    }
+
+    final result = await showOkCancelAlertDialog(
+      context: context,
+      title: s.windows_architecture_mismatch_dialog_title,
+      message: s.windows_architecture_mismatch_dialog_message(
+        buildArchitectureLabel,
+        operatingSystemArchitectureLabel,
+        _App.officialDownloadPageUrl,
+      ),
+      okLabel: s.open_official_download_page,
+      cancelLabel: s.cancel,
+    );
+    if (result != OkCancelResult.ok) {
+      return;
+    }
+
+    await _openOfficialDownloadPage();
+  }
+
+  String _getWindowsBuildArchitecture() {
+    final abi = Abi.current();
+    if (abi == Abi.windowsArm64) {
+      return 'arm64';
+    }
+    if (abi == Abi.windowsX64) {
+      return 'x64';
+    }
+    if (abi == Abi.windowsIA32) {
+      return 'x86';
+    }
+    return 'unknown';
+  }
+
+  String _getWindowsOperatingSystemArchitecture() {
+    final wow64Architecture = _normalizeWindowsArchitecture(
+      Platform.environment['PROCESSOR_ARCHITEW6432'],
+    );
+    if (wow64Architecture != 'unknown') {
+      return wow64Architecture;
+    }
+
+    final processArchitecture = _normalizeWindowsArchitecture(
+      Platform.environment['PROCESSOR_ARCHITECTURE'],
+    );
+    if (processArchitecture != 'unknown') {
+      return processArchitecture;
+    }
+
+    final kernelArchitecture = _normalizeWindowsArchitecture(SysInfo.rawKernelArchitecture);
+    if (kernelArchitecture != 'unknown') {
+      return kernelArchitecture;
+    }
+
+    final programFilesArm = Platform.environment['ProgramFiles(Arm)'] ?? '';
+    if (programFilesArm.isNotEmpty) {
+      return 'arm64';
+    }
+
+    return 'unknown';
+  }
+
+  String _normalizeWindowsArchitecture(String? rawArchitecture) {
+    final architecture = (rawArchitecture ?? '').trim().toUpperCase();
+    if (architecture.isEmpty) {
+      return 'unknown';
+    }
+    if (architecture == 'ARM64' || architecture == 'AARCH64') {
+      return 'arm64';
+    }
+    if (architecture == 'AMD64' || architecture == 'X64' || architecture == 'X86_64') {
+      return 'x64';
+    }
+    if (architecture == 'X86' || architecture == 'IA32' || architecture == 'I386') {
+      return 'x86';
+    }
+    return 'unknown';
+  }
+
+  Future<void> _openOfficialDownloadPage() async {
+    try {
+      await launchUrl(
+        Uri.parse(_App.officialDownloadPageUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (e) {
+      qqe(e);
+      // Alert.error(S.current.failed_to_open_url);
+      // Sentry.captureException(e, stackTrace: StackTrace.current);
+    }
+  }
+
   /// 根据运行环境获取对应的 distribution keys
   Future<List<String>> _getDistributionKeysForPlatform() async {
     if (Platform.isMacOS) {
@@ -509,13 +724,8 @@ extension _$App on _App {
       ];
     } else if (Platform.isWindows) {
       try {
-        // 检测 Windows 架构
-        // 在 Windows 上，可以通过环境变量 PROCESSOR_ARCHITECTURE 来判断
-        final processorArch = Platform.environment['PROCESSOR_ARCHITECTURE']?.toUpperCase() ?? '';
-        final processorArchW6432 = Platform.environment['PROCESSOR_ARCHITEW6432']?.toUpperCase() ?? '';
-
-        // ARM64 架构会显示为 ARM64
-        final isArm64 = processorArch == 'ARM64' || processorArchW6432 == 'ARM64';
+        final windowsArchitecture = _getWindowsOperatingSystemArchitecture();
+        final isArm64 = windowsArchitecture == 'arm64';
 
         if (isArm64) {
           return [
@@ -599,10 +809,11 @@ extension _$App on _App {
     // 构建查询参数，使用 List 来支持多个相同的 key
     // NestJS 的 @Query('key') 可以接受数组，格式为 ?key=value1&key=value2
     final queryParts = keys.map((key) => 'key=${Uri.encodeComponent(key)}').toList();
-    final queryString = queryParts.join('&');
+    String queryString = queryParts.join('&');
+    queryString = Uri.encodeComponent(queryString);
 
     // 构建完整的 URL，包含查询参数
-    final baseUrl = "${Config.apiv2}/distributions/latest";
+    final baseUrl = "${Config.domain}/distributions/latest";
     final fullUrl = "$baseUrl?$queryString";
 
     final res = await _get(fullUrl, timeout: 2000.ms);
@@ -690,4 +901,25 @@ extension _$App on _App {
 
     return (json, sp);
   }
+}
+
+List<int> _extractOsVersionNumbers(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return const [];
+
+  // Prefer semantic-like version segments, e.g. "26.2.1" in
+  // "Version 26.2.1 (Build 23C71)".
+  final versionMatch = RegExp(r'\d+(?:\.\d+)+').firstMatch(trimmed)?.group(0);
+  if (versionMatch != null) {
+    return versionMatch.split('.').map(int.tryParse).whereType<int>().toList();
+  }
+
+  // Fallback to first integer when dotted version is unavailable.
+  final majorMatch = RegExp(r'\d+').firstMatch(trimmed)?.group(0);
+  if (majorMatch != null) {
+    final major = int.tryParse(majorMatch);
+    if (major != null) return [major];
+  }
+
+  return const [];
 }

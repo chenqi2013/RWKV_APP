@@ -164,11 +164,11 @@ class S {
     );
   }
 
-  /// `换行符显示`
-  String get show_escape_characters {
+  /// `直接渲染换行`
+  String get render_newline_directly {
     return Intl.message(
-      '换行符显示',
-      name: 'show_escape_characters',
+      '直接渲染换行',
+      name: 'render_newline_directly',
       desc: '',
       args: [],
     );
@@ -194,6 +194,76 @@ class S {
     );
   }
 
+  /// `渲染空格符号`
+  String get render_space_symbol {
+    return Intl.message(
+      '渲染空格符号',
+      name: 'render_space_symbol',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `已渲染空格`
+  String get space_rendered {
+    return Intl.message('已渲染空格', name: 'space_rendered', desc: '', args: []);
+  }
+
+  /// `已渲染空格符号`
+  String get space_symbols_rendered {
+    return Intl.message(
+      '已渲染空格符号',
+      name: 'space_symbols_rendered',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `空格符设置`
+  String get space_symbol_settings {
+    return Intl.message(
+      '空格符设置',
+      name: 'space_symbol_settings',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `换行符设置`
+  String get line_break_symbol_settings {
+    return Intl.message(
+      '换行符设置',
+      name: 'line_break_symbol_settings',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `空格符样式`
+  String get space_symbol_style {
+    return Intl.message(
+      '空格符样式',
+      name: 'space_symbol_style',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `文本颜色`
+  String get text_color {
+    return Intl.message('文本颜色', name: 'text_color', desc: '', args: []);
+  }
+
+  /// `背景颜色`
+  String get background_color {
+    return Intl.message('背景颜色', name: 'background_color', desc: '', args: []);
+  }
+
+  /// `预览`
+  String get preview {
+    return Intl.message('预览', name: 'preview', desc: '', args: []);
+  }
+
   /// `仅显示 Prefill 日志`
   String get show_prefill_log_only {
     return Intl.message(
@@ -212,6 +282,16 @@ class S {
   /// `Life Span`
   String get life_span {
     return Intl.message('Life Span', name: 'life_span', desc: '', args: []);
+  }
+
+  /// `小于 0.01 GB`
+  String get less_than_01_gb {
+    return Intl.message(
+      '小于 0.01 GB',
+      name: 'less_than_01_gb',
+      desc: '',
+      args: [],
+    );
   }
 
   /// `状态面板`
@@ -334,6 +414,16 @@ class S {
     );
   }
 
+  /// `推荐至少选择【推理-快】`
+  String get think_mode_selector_recommendation {
+    return Intl.message(
+      '推荐至少选择【推理-快】',
+      name: 'think_mode_selector_recommendation',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `推理{footer}-快`
   String think_button_mode_fast(Object footer) {
     return Intl.message(
@@ -414,6 +504,96 @@ class S {
     );
   }
 
+  /// `选择 RWKV 要模仿的声音`
+  String get tts_voice_source_sheet_title {
+    return Intl.message(
+      '选择 RWKV 要模仿的声音',
+      name: 'tts_voice_source_sheet_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `在下列的不同方式中选择录入声音的方式`
+  String get tts_voice_source_sheet_subtitle {
+    return Intl.message(
+      '在下列的不同方式中选择录入声音的方式',
+      name: 'tts_voice_source_sheet_subtitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `预设声音`
+  String get tts_voice_source_preset_title {
+    return Intl.message(
+      '预设声音',
+      name: 'tts_voice_source_preset_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `在 RWKV 内置的预设声音中选择`
+  String get tts_voice_source_preset_subtitle {
+    return Intl.message(
+      '在 RWKV 内置的预设声音中选择',
+      name: 'tts_voice_source_preset_subtitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `我的声音`
+  String get tts_voice_source_my_voice_title {
+    return Intl.message(
+      '我的声音',
+      name: 'tts_voice_source_my_voice_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `录制我的声音，让 RWKV 模仿它`
+  String get tts_voice_source_my_voice_subtitle {
+    return Intl.message(
+      '录制我的声音，让 RWKV 模仿它',
+      name: 'tts_voice_source_my_voice_subtitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `声音文件`
+  String get tts_voice_source_file_title {
+    return Intl.message(
+      '声音文件',
+      name: 'tts_voice_source_file_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `选择一个 WAV 文件让 RWKV 模仿它`
+  String get tts_voice_source_file_subtitle {
+    return Intl.message(
+      '选择一个 WAV 文件让 RWKV 模仿它',
+      name: 'tts_voice_source_file_subtitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `使用下方文件的声音来生成语音`
+  String get tts_voice_source_file_panel_hint {
+    return Intl.message(
+      '使用下方文件的声音来生成语音',
+      name: 'tts_voice_source_file_panel_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `并行推理中，同时生成 {count} 条消息`
   String batch_inference_running(Object count) {
     return Intl.message(
@@ -459,6 +639,126 @@ class S {
     return Intl.message(
       '请选择你喜欢的分支以进行接下来的对话',
       name: 'please_select_a_branch_to_continue_the_conversation',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `已经是第一条消息了`
+  String get branch_switcher_tooltip_first {
+    return Intl.message(
+      '已经是第一条消息了',
+      name: 'branch_switcher_tooltip_first',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `上一条消息`
+  String get branch_switcher_tooltip_prev {
+    return Intl.message(
+      '上一条消息',
+      name: 'branch_switcher_tooltip_prev',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `已经是最后一条消息了`
+  String get branch_switcher_tooltip_last {
+    return Intl.message(
+      '已经是最后一条消息了',
+      name: 'branch_switcher_tooltip_last',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `下一条消息`
+  String get branch_switcher_tooltip_next {
+    return Intl.message(
+      '下一条消息',
+      name: 'branch_switcher_tooltip_next',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `已切换分支`
+  String get user_message_branch_switched {
+    return Intl.message(
+      '已切换分支',
+      name: 'user_message_branch_switched',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `消息操作`
+  String get user_message_actions_panel_title {
+    return Intl.message(
+      '消息操作',
+      name: 'user_message_actions_panel_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `当前消息暂无可用操作`
+  String get user_message_actions_panel_empty {
+    return Intl.message(
+      '当前消息暂无可用操作',
+      name: 'user_message_actions_panel_empty',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `切换分支`
+  String get user_message_actions_panel_switch_branch_title {
+    return Intl.message(
+      '切换分支',
+      name: 'user_message_actions_panel_switch_branch_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `通过上一条 / 下一条切换相邻分支`
+  String get user_message_actions_panel_switch_branch_subtitle {
+    return Intl.message(
+      '通过上一条 / 下一条切换相邻分支',
+      name: 'user_message_actions_panel_switch_branch_subtitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `删除当前消息`
+  String get delete_current_branch {
+    return Intl.message(
+      '删除当前消息',
+      name: 'delete_current_branch',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `删除当前消息`
+  String get delete_branch_title {
+    return Intl.message(
+      '删除当前消息',
+      name: 'delete_branch_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `这是危险操作：将永久删除当前消息及其所有子节点，并同步删除数据库中的相关记录。该操作不可恢复，是否继续？`
+  String get delete_branch_confirmation_message {
+    return Intl.message(
+      '这是危险操作：将永久删除当前消息及其所有子节点，并同步删除数据库中的相关记录。该操作不可恢复，是否继续？',
+      name: 'delete_branch_confirmation_message',
       desc: '',
       args: [],
     );
@@ -1086,6 +1386,16 @@ class S {
     return Intl.message('加载中...', name: 'loading', desc: '', args: []);
   }
 
+  /// `加载{percent}%`
+  String loading_progress_percent(Object percent) {
+    return Intl.message(
+      '加载$percent%',
+      name: 'loading_progress_percent',
+      desc: '',
+      args: [percent],
+    );
+  }
+
   /// `取消`
   String get cancel {
     return Intl.message('取消', name: 'cancel', desc: '', args: []);
@@ -1391,6 +1701,36 @@ class S {
     return Intl.message('字体大小', name: 'font_size', desc: '', args: []);
   }
 
+  /// `消息行距`
+  String get message_line_height {
+    return Intl.message(
+      '消息行距',
+      name: 'message_line_height',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `使用默认行距`
+  String get use_default_line_height {
+    return Intl.message(
+      '使用默认行距',
+      name: 'use_default_line_height',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `默认会使用字体和渲染器本身的行高，不是固定 1.0x。这里的自定义范围是 1.0x 到 2.0x。`
+  String get message_line_height_default_hint {
+    return Intl.message(
+      '默认会使用字体和渲染器本身的行高，不是固定 1.0x。这里的自定义范围是 1.0x 到 2.0x。',
+      name: 'message_line_height_default_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `字体设置`
   String get font_setting {
     return Intl.message('字体设置', name: 'font_setting', desc: '', args: []);
@@ -1593,14 +1933,84 @@ class S {
     return Intl.message('RWKV', name: 'rwkv', desc: '', args: []);
   }
 
-  /// `预填`
+  /// `预填充`
   String get prefill {
-    return Intl.message('预填', name: 'prefill', desc: '', args: []);
+    return Intl.message('预填充', name: 'prefill', desc: '', args: []);
+  }
+
+  /// `预填充进度 {percent}`
+  String prefill_progress_percent(Object percent) {
+    return Intl.message(
+      '预填充进度 $percent',
+      name: 'prefill_progress_percent',
+      desc: '',
+      args: [percent],
+    );
   }
 
   /// `解码`
   String get decode {
     return Intl.message('解码', name: 'decode', desc: '', args: []);
+  }
+
+  /// `单条消息 Token 数量`
+  String get message_token_count {
+    return Intl.message(
+      '单条消息 Token 数量',
+      name: 'message_token_count',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `当前对话 Token 数量`
+  String get conversation_token_count {
+    return Intl.message(
+      '当前对话 Token 数量',
+      name: 'conversation_token_count',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `建议开启新对话`
+  String get conversation_token_limit_hint_short {
+    return Intl.message(
+      '建议开启新对话',
+      name: 'conversation_token_limit_hint_short',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `当前对话已超过 8,000 tokens，建议开启新对话`
+  String get conversation_token_limit_recommend_new_chat {
+    return Intl.message(
+      '当前对话已超过 8,000 tokens，建议开启新对话',
+      name: 'conversation_token_limit_recommend_new_chat',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `预填充速度（tokens 每秒）`
+  String get prefill_speed_tokens_per_second {
+    return Intl.message(
+      '预填充速度（tokens 每秒）',
+      name: 'prefill_speed_tokens_per_second',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `解码速度（tokens 每秒）`
+  String get decode_speed_tokens_per_second {
+    return Intl.message(
+      '解码速度（tokens 每秒）',
+      name: 'decode_speed_tokens_per_second',
+      desc: '',
+      args: [],
+    );
   }
 
   /// `当前回合`
@@ -2938,6 +3348,16 @@ class S {
     return Intl.message('更改', name: 'change', desc: '', args: []);
   }
 
+  /// `编辑`
+  String get edit {
+    return Intl.message('编辑', name: 'edit', desc: '', args: []);
+  }
+
+  /// `编辑中`
+  String get editing {
+    return Intl.message('编辑中', name: 'editing', desc: '', args: []);
+  }
+
   /// `状态`
   String get status {
     return Intl.message('状态', name: 'status', desc: '', args: []);
@@ -3744,10 +4164,10 @@ class S {
     );
   }
 
-  /// `Hello! 你好！这是用户消息的预览。`
+  /// `Hello! 你好！这是用户消息的预览。\n第二行会跟着你调节的行距一起变化。`
   String get font_preview_user_message {
     return Intl.message(
-      'Hello! 你好！这是用户消息的预览。',
+      'Hello! 你好！这是用户消息的预览。\n第二行会跟着你调节的行距一起变化。',
       name: 'font_preview_user_message',
       desc: '',
       args: [],
@@ -3889,6 +4309,31 @@ class S {
     return Intl.message(
       '其他文件 (这些文件可能是已经过期或不再支持的权重 RWKV Chat 无需再使用它们)',
       name: 'other_files',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `MLX/CoreML 缓存`
+  String get mlx_cache {
+    return Intl.message('MLX/CoreML 缓存', name: 'mlx_cache', desc: '', args: []);
+  }
+
+  /// `删除 MLX/CoreML 缓存可释放磁盘空间，但下次加载对应的 MLX/CoreML 模型会更慢。`
+  String get mlx_cache_notice {
+    return Intl.message(
+      '删除 MLX/CoreML 缓存可释放磁盘空间，但下次加载对应的 MLX/CoreML 模型会更慢。',
+      name: 'mlx_cache_notice',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `确定要删除这个 MLX/CoreML 缓存吗？`
+  String get delete_mlx_cache_confirmation {
+    return Intl.message(
+      '确定要删除这个 MLX/CoreML 缓存吗？',
+      name: 'delete_mlx_cache_confirmation',
       desc: '',
       args: [],
     );
@@ -4065,7 +4510,7 @@ class S {
   }
 
   /// `导入成功：已导入 {count} 个文件`
-  String import_all_weight_files_success(int count) {
+  String import_all_weight_files_success(Object count) {
     return Intl.message(
       '导入成功：已导入 $count 个文件',
       name: 'import_all_weight_files_success',
@@ -4587,6 +5032,294 @@ class S {
       desc: '',
       args: [error],
     );
+  }
+
+  /// `升级 iOS 18+ 可使用这款权重，更快更省电`
+  String get model_item_ios18_weight_hint {
+    return Intl.message(
+      '升级 iOS 18+ 可使用这款权重，更快更省电',
+      name: 'model_item_ios18_weight_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `TTS 正在运行，请等待其完成`
+  String get tts_is_running_please_wait {
+    return Intl.message(
+      'TTS 正在运行，请等待其完成',
+      name: 'tts_is_running_please_wait',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `请选择一个预设声音或录制您的声音`
+  String get please_select_a_spk_or_a_wav_file {
+    return Intl.message(
+      '请选择一个预设声音或录制您的声音',
+      name: 'please_select_a_spk_or_a_wav_file',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `请输入文本以生成语音`
+  String get please_enter_text_to_generate_tts {
+    return Intl.message(
+      '请输入文本以生成语音',
+      name: 'please_enter_text_to_generate_tts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `检测到架构不匹配：当前应用 Build Architecture 为 {buildArchitecture}，但 Windows Operating System 为 {operatingSystemArchitecture}。请前往官方下载页下载匹配版本：{url}`
+  String windows_architecture_mismatch_warning(
+    Object buildArchitecture,
+    Object operatingSystemArchitecture,
+    Object url,
+  ) {
+    return Intl.message(
+      '检测到架构不匹配：当前应用 Build Architecture 为 $buildArchitecture，但 Windows Operating System 为 $operatingSystemArchitecture。请前往官方下载页下载匹配版本：$url',
+      name: 'windows_architecture_mismatch_warning',
+      desc: '',
+      args: [buildArchitecture, operatingSystemArchitecture, url],
+    );
+  }
+
+  /// `架构不匹配`
+  String get windows_architecture_mismatch_dialog_title {
+    return Intl.message(
+      '架构不匹配',
+      name: 'windows_architecture_mismatch_dialog_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `当前应用 Build Architecture 为 {buildArchitecture}，但 Windows Operating System 为 {operatingSystemArchitecture}。\n\n请前往官方下载页下载匹配架构的可执行文件：\n{url}`
+  String windows_architecture_mismatch_dialog_message(
+    Object buildArchitecture,
+    Object operatingSystemArchitecture,
+    Object url,
+  ) {
+    return Intl.message(
+      '当前应用 Build Architecture 为 $buildArchitecture，但 Windows Operating System 为 $operatingSystemArchitecture。\n\n请前往官方下载页下载匹配架构的可执行文件：\n$url',
+      name: 'windows_architecture_mismatch_dialog_message',
+      desc: '',
+      args: [buildArchitecture, operatingSystemArchitecture, url],
+    );
+  }
+
+  /// `打开官方下载页`
+  String get open_official_download_page {
+    return Intl.message(
+      '打开官方下载页',
+      name: 'open_official_download_page',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `模仿`
+  String get mimic {
+    return Intl.message('模仿', name: 'mimic', desc: '', args: []);
+  }
+
+  /// `提问`
+  String get ask {
+    return Intl.message('提问', name: 'ask', desc: '', args: []);
+  }
+
+  /// `RWKV 帮你问`
+  String get question_generator {
+    return Intl.message(
+      'RWKV 帮你问',
+      name: 'question_generator',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `不知道怎么开口更合适？让 RWKV 先帮你想一个吧。`
+  String get question_generator_mock_description {
+    return Intl.message(
+      '不知道怎么开口更合适？让 RWKV 先帮你想一个吧。',
+      name: 'question_generator_mock_description',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `一时想不到怎么问？让 RWKV 多帮你想几个问题吧。`
+  String get question_generator_mock_batch_description {
+    return Intl.message(
+      '一时想不到怎么问？让 RWKV 多帮你想几个问题吧。',
+      name: 'question_generator_mock_batch_description',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `选好上面的问题开头后，点一下生成，RWKV 会先帮你想一个可以直接提问的问题。`
+  String get question_generator_empty_chat_hint {
+    return Intl.message(
+      '选好上面的问题开头后，点一下生成，RWKV 会先帮你想一个可以直接提问的问题。',
+      name: 'question_generator_empty_chat_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `选好上面的问题开头后，点一下生成，RWKV 会先帮你想几个可以直接提问的问题。`
+  String get question_generator_empty_chat_batch_hint {
+    return Intl.message(
+      '选好上面的问题开头后，点一下生成，RWKV 会先帮你想几个可以直接提问的问题。',
+      name: 'question_generator_empty_chat_batch_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `点一下生成，RWKV 会顺着你选好的开头，帮你想出最多 {count} 个问题。`
+  String question_generator_tap_generate_hint(Object count) {
+    return Intl.message(
+      '点一下生成，RWKV 会顺着你选好的开头，帮你想出最多 $count 个问题。',
+      name: 'question_generator_tap_generate_hint',
+      desc: '',
+      args: [count],
+    );
+  }
+
+  /// `切换语言后，上面可选的问题开头也会一起变化。挑一个顺手的开头，再让 RWKV 接着往下想就好。`
+  String get question_generator_language_switched_hint {
+    return Intl.message(
+      '切换语言后，上面可选的问题开头也会一起变化。挑一个顺手的开头，再让 RWKV 接着往下想就好。',
+      name: 'question_generator_language_switched_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `点一点不同的问题开头，RWKV 会顺着这个开头继续帮你生成问题。你也可以直接改下面的输入框，写一个更符合你想法的开头。`
+  String get question_generator_prefix_guide {
+    return Intl.message(
+      '点一点不同的问题开头，RWKV 会顺着这个开头继续帮你生成问题。你也可以直接改下面的输入框，写一个更符合你想法的开头。',
+      name: 'question_generator_prefix_guide',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `问题前缀`
+  String get question_generator_prefixes {
+    return Intl.message(
+      '问题前缀',
+      name: 'question_generator_prefixes',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `生成数量`
+  String get question_generator_count {
+    return Intl.message(
+      '生成数量',
+      name: 'question_generator_count',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `在这里写下你想要的问题开头...`
+  String get question_generator_prefix_input_placeholder {
+    return Intl.message(
+      '在这里写下你想要的问题开头...',
+      name: 'question_generator_prefix_input_placeholder',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `如果留空，RWKV 会根据上下文生成问题`
+  String get question_generator_context_prefix_input_placeholder {
+    return Intl.message(
+      '如果留空，RWKV 会根据上下文生成问题',
+      name: 'question_generator_context_prefix_input_placeholder',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `请先输入一个问题前缀`
+  String get question_generator_prefix_required {
+    return Intl.message(
+      '请先输入一个问题前缀',
+      name: 'question_generator_prefix_required',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `点击已生成的问题，即可粘贴到对话输入框。`
+  String get question_generator_question_action_guide {
+    return Intl.message(
+      '点击已生成的问题，即可粘贴到对话输入框。',
+      name: 'question_generator_question_action_guide',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `我想让 RWKV 以这种语言提问...`
+  String get question_language {
+    return Intl.message(
+      '我想让 RWKV 以这种语言提问...',
+      name: 'question_language',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `前缀组`
+  String get prefix_bank {
+    return Intl.message('前缀组', name: 'prefix_bank', desc: '', args: []);
+  }
+
+  /// `前缀示例`
+  String get prefix_examples {
+    return Intl.message('前缀示例', name: 'prefix_examples', desc: '', args: []);
+  }
+
+  /// `生成的问题`
+  String get generated_questions {
+    return Intl.message(
+      '生成的问题',
+      name: 'generated_questions',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `English`
+  String get english {
+    return Intl.message('English', name: 'english', desc: '', args: []);
+  }
+
+  /// `日本語`
+  String get japanese {
+    return Intl.message('日本語', name: 'japanese', desc: '', args: []);
+  }
+
+  /// `한국어`
+  String get korean {
+    return Intl.message('한국어', name: 'korean', desc: '', args: []);
+  }
+
+  /// `Русский`
+  String get russian {
+    return Intl.message('Русский', name: 'russian', desc: '', args: []);
   }
 }
 

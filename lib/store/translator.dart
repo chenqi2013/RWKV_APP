@@ -120,7 +120,7 @@ extension _$Translator on _Translator {
   }
 
   void _onBrowserTabsChanged(List<BrowserTab> next) {
-    final Map<int, BrowserTab> latestTabs = {};
+    final latestTabs = <int, BrowserTab>{};
     for (final tab in next) {
       final windowId = tab.windowId;
       latestTabs[windowId] = tab;
@@ -477,6 +477,7 @@ extension _$Translator on _Translator {
         batchMessages,
         enableReasoning: reasoning,
         forceReasoning: thinkingMode.forceReasoning,
+        addGenerationPrompt: true,
         batchSize: batchSize,
         modelID: modelID,
       ),

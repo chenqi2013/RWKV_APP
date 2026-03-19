@@ -1,16 +1,20 @@
-import 'package:collection/collection.dart';
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_roleplay/models/model_info.dart' show ModelInfo;
 import 'package:flutter_roleplay/services/role_play_manage.dart' show RoleplayManage, RoleplayManageModelType;
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:rwkv_downloader/downloader.dart';
+
+// Project imports:
+import 'package:zone/gen/l10n.dart' show S;
 import 'package:zone/model/file_info.dart';
 import 'package:zone/store/p.dart' show $RWKVLoad, $Remote, P;
 import 'package:zone/widgets/model_item.dart';
-
-import 'package:zone/gen/l10n.dart' show S;
 
 ModelInfo? rolePlayCurrentModel;
 
@@ -56,6 +60,9 @@ class _RolePlayItemState extends ConsumerState<RolePlayItem> {
     );
     final sp = await P.rwkv.loadChat(fileInfo: widget.file);
     RoleplayManage.onModelDownloadComplete(info, [sp.$1, sp.$2], P.rwkv.receivePort);
+    if (!mounted) {
+      return;
+    }
     Navigator.pop(context);
   }
 
@@ -63,7 +70,7 @@ class _RolePlayItemState extends ConsumerState<RolePlayItem> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final local = ref.watch(P.remote.locals(widget.file));
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
 
     final noState = widget.file.state.isEmpty;
 
@@ -104,7 +111,7 @@ class _RolePlayItemState extends ConsumerState<RolePlayItem> {
               margin: const .only(top: 8),
               decoration: BoxDecoration(
                 borderRadius: .circular(8),
-                color: customTheme.settingItem,
+                color: appTheme.settingItem,
               ),
               child: Column(
                 children: [

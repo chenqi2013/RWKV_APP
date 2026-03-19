@@ -89,6 +89,8 @@ RWKV App 支持多轮对话、文本转语音、视觉理解等多种任务。
 
 **请确保您已搭建好 [Flutter](https://flutter.dev/) 开发环境。**
 
+> 开发环境要求 **Flutter 3.41.1+**（推荐使用 stable channel）。
+
 1. **克隆仓库：**
 
 ```bash
@@ -113,7 +115,7 @@ flutter pub get
 
 4. **（可选）为 `tools` 目录安装依赖：**
 
-*执行此步骤可避免在 VS Code 或 Cursor 中运行应用时出现「您的项目中存在错误」的提示。*
+_执行此步骤可避免在 VS Code 或 Cursor 中运行应用时出现「您的项目中存在错误」的提示。_
 
 ```bash
 cd tools; flutter pub get; cd ..;
@@ -124,6 +126,17 @@ cd tools; flutter pub get; cd ..;
 ```bash
 flutter run
 ```
+
+#### Windows ARM64 调试（QNN）
+
+如果您在 Windows ARM64 上调试，请在 `pubspec.yaml` 中取消以下配置的注释：
+
+```yaml
+- path: assets/lib/qnn-windows/
+  platforms: [windows]
+```
+
+在 Windows ARM64 上调试时，请使用 Flutter 的 `master` 分支，而不是 `stable` 分支。
 
 ## 🛠️ 技术亮点
 
@@ -146,6 +159,7 @@ flutter run
 
 - 🐞 **发现错误或问题？** [在此报告！](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D)
 - 💡 **想提出建议？** [建议一项功能！](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)
+- 🎨 **想贡献自定义主题？** [Theme 快速开始](CONTRIBUTING.zh-hans.md)
 
 ## 📄 开源许可协议
 

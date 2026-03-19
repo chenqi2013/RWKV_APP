@@ -1,24 +1,27 @@
-// ignore: unused_import
-import 'dart:developer';
+// Flutter imports:
+import 'package:flutter/material.dart';
 
+// Package imports:
 import 'package:adaptive_dialog/adaptive_dialog.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_roleplay/flutter_roleplay.dart';
 import 'package:flutter_roleplay/models/model_info.dart';
+import 'package:halo/halo.dart';
+import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:rwkv_downloader/downloader.dart' show TaskState;
 import 'package:rwkv_mobile_flutter/types.dart';
+import 'package:sprintf/sprintf.dart';
+
+// Project imports:
+import 'package:zone/func/format_bytes.dart';
 import 'package:zone/gen/l10n.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:halo/halo.dart';
 import 'package:zone/model/file_info.dart';
 import 'package:zone/model/group_info.dart';
 import 'package:zone/router/router.dart';
 import 'package:zone/store/p.dart';
-import 'package:halo_alert/halo_alert.dart';
-import 'package:zone/func/gb_display.dart';
-import 'package:sprintf/sprintf.dart';
+import 'package:zone/widgets/loading_progress_button_content.dart';
 import 'package:zone/widgets/model_tag.dart';
 
 ModelInfo? rolePlayTTSModel;
@@ -333,9 +336,13 @@ class _TTSGroupItemState extends ConsumerState<TTSGroupItem> {
       return const SizedBox.shrink();
     }
 
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
+
     final qw = ref.watch(P.app.qw);
     final qb = ref.watch(P.app.qb);
+    final primary = appTheme.primary;
+
+    final startButtonRadius = appTheme.startButtonRadius;
 
     final files = _fileInfos.m((e) {
       return ref.watch(P.remote.locals(e));
@@ -359,6 +366,13 @@ class _TTSGroupItemState extends ConsumerState<TTSGroupItem> {
     final currentModel = ref.watch(P.rwkv.latestModel);
     bool alreadyStarted = currentModel == widget.fileInfo;
     final loading = ref.watch(P.rwkv.loading);
+    final loadingStatus = ref.watch(P.rwkv.loadingStatus);
+    final loadingProgress = ref.watch(P.rwkv.loadingProgress);
+    final modelLoading =
+        loadingStatus[widget.fileInfo] == .loading ||
+        loadingStatus[widget.fileInfo] == .loadModelWithExtra ||
+        loadingStatus[widget.fileInfo] == .setQnnLibraryPath;
+    final modelLoadingProgress = loadingProgress[widget.fileInfo];
 
     if (P.app.pageKey.q == .rolePlaying) {
       alreadyStarted = widget.fileInfo.fileName == rolePlayTTSModel?.id;
@@ -377,7 +391,7 @@ class _TTSGroupItemState extends ConsumerState<TTSGroupItem> {
       borderRadius: .circular(8),
       child: Container(
         decoration: BoxDecoration(
-          color: customTheme.settingItem,
+          color: appTheme.settingItem,
           borderRadius: .circular(8),
           border: .all(color: qw.q(.1), width: .5),
         ),
@@ -424,15 +438,25 @@ class _TTSGroupItemState extends ConsumerState<TTSGroupItem> {
                       if (!alreadyStarted)
                         GestureDetector(
                           onTap: loading ? null : _onSparkTap,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: loading ? kCG.q(.5) : kCG,
-                              borderRadius: .circular(4),
-                            ),
-                            padding: const .all(8),
-                            child: Text(
-                              startTitle,
-                              style: TS(c: qw),
+                          child: AnimatedOpacity(
+                            opacity: loading ? 0.6 : 1,
+                            duration: 200.ms,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: primary,
+                                borderRadius: .circular(startButtonRadius),
+                              ),
+                              padding: const .all(8),
+                              child: modelLoading
+                                  ? LoadingProgressButtonContent(
+                                      progress: modelLoadingProgress,
+                                      textStyle: TS(c: qw),
+                                      indicatorColor: qw,
+                                    )
+                                  : Text(
+                                      startTitle,
+                                      style: TS(c: qw),
+                                    ),
                             ),
                           ),
                         ),
@@ -442,7 +466,7 @@ class _TTSGroupItemState extends ConsumerState<TTSGroupItem> {
                           child: Container(
                             decoration: BoxDecoration(
                               color: kG.q(.5),
-                              borderRadius: .circular(8),
+                              borderRadius: .circular(startButtonRadius),
                             ),
                             padding: const .all(8),
                             child: Text(s.chatting, style: TS(c: qw)),
@@ -550,7 +574,7 @@ class _CollapsedContent extends ConsumerWidget {
               style: const TS(w: .w600),
             ),
             Text(
-              gbDisplay(totalSize),
+              formatBytes(totalSize),
               style: TS(c: qb.q(.7), w: .w500),
             ),
           ],
@@ -598,11 +622,10 @@ class _TTSTags extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Wrap(
       spacing: 4,
       runSpacing: 8,
-      children: [
+      children: <ModelTag>[
         const ModelTag(tag: "TTS"),
         if (isNpu) const ModelTag(tag: "NPU"),
         if (backend == Backend.webRwkv) const ModelTag(tag: "WebRWKV"),
@@ -704,7 +727,6 @@ class _ExpandedFileItem extends ConsumerWidget {
     final progress = localFile.progress / 100;
     final fileSize = fileInfo.fileSize;
     final qb = ref.watch(P.app.qb);
-    final primary = Theme.of(context).colorScheme.primary;
     final state = localFile.state;
     double networkSpeed = localFile.networkSpeed.clamp(0, 99999999).toDouble();
     Duration timeRemaining = localFile.timeRemaining;
@@ -742,7 +764,7 @@ class _ExpandedFileItem extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          gbDisplay(fileSize),
+                          formatBytes(fileSize),
                           style: TS(
                             c: qb.q(.7),
                             w: .w500,
@@ -752,12 +774,6 @@ class _ExpandedFileItem extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  if (hasFile)
-                    Icon(
-                      Icons.download_done,
-                      color: primary,
-                      size: 20,
-                    ),
                 ],
               ),
               if (downloading) ...[

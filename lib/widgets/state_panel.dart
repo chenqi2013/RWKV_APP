@@ -1,149 +1,221 @@
-// ignore: unused_import
-import 'dart:developer';
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
+
+// Project imports:
+import 'package:zone/func/format_debug_panel_text.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/store/p.dart';
+import 'package:zone/widgets/debug_text_display_settings_section.dart';
 
 class StatePanel extends ConsumerWidget {
-  static Future<void> show(BuildContext context) async {
-    if (P.rwkv.statePanelShown.q) return;
-    P.rwkv.statePanelShown.q = true;
-    P.rwkv.refreshStatePanel();
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: .8,
-          maxChildSize: .9,
-          expand: false,
-          snap: false,
-          builder: (BuildContext context, ScrollController scrollController) {
-            return StatePanel(scrollController: scrollController);
-          },
-        );
+  static const String panelKey = 'StatePanel';
+
+  static Future<void> show() async {
+    await P.ui.showPanel(
+      key: panelKey,
+      beforeShow: () async {
+        P.rwkv.statePanelShown.q = true;
+        P.rwkv.refreshStatePanel();
       },
+      afterHide: (_) {
+        P.rwkv.statePanelShown.q = false;
+      },
+      initialChildSize: .8,
+      maxChildSize: .905,
+      builder: (scrollController) => StatePanel(scrollController: scrollController),
     );
-    P.rwkv.statePanelShown.q = false;
   }
 
   const StatePanel({super.key, required this.scrollController});
 
   final ScrollController scrollController;
 
+  static double get _listPadding => P.app.isMobile.q ? 8 : 12;
+
   void _onRefreshPressed() {
     Alert.info(S.current.refreshed);
     P.rwkv.refreshStatePanel();
-    scrollController.animateTo(
-      scrollController.position.maxScrollExtent,
-      duration: 200.ms,
-      curve: Curves.easeInOut,
-    );
-  }
-
-  void _onClosePressed() {
-    pop();
-  }
-
-  void _onNReplacedPressed() {
-    P.rwkv.showEscapeCharacters.q = !P.rwkv.showEscapeCharacters.q;
-    P.rwkv.refreshStatePanel();
+    if (scrollController.hasClients) {
+      scrollController.animateTo(
+        scrollController.position.maxScrollExtent,
+        duration: 200.ms,
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final stateLogList = ref.watch(P.rwkv.stateLogList);
     final qb = ref.watch(P.app.qb);
-    final showEscapeCharacters = ref.watch(P.rwkv.showEscapeCharacters);
+    final appTheme = ref.watch(P.app.theme);
+    final renderNewlineDirectly = ref.watch(P.rwkv.renderNewlineDirectly);
+    final renderSpaceSymbol = ref.watch(P.rwkv.renderSpaceSymbol);
+    final paddingBottom = ref.watch(P.app.quantizedIntPaddingBottom);
+
     return ClipRRect(
-      borderRadius: .circular(16),
-      child: Container(
-        margin: const .only(top: 8),
-        child: Column(
-          crossAxisAlignment: .stretch,
-          children: [
-            Row(
-              children: [
-                const SizedBox(width: 8),
-                TextButton(
-                  style: TextButton.styleFrom(iconSize: 16),
-                  onPressed: _onRefreshPressed,
-                  child: Text(S.current.refresh),
-                ),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: .center,
-                    mainAxisAlignment: .center,
-                    children: [
-                      const Icon(Icons.tune),
-                      const SizedBox(width: 4),
-                      Text(
-                        S.current.state_panel,
-                        style: const TS(s: 16, w: .w500),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton(
-                  style: TextButton.styleFrom(iconSize: 16),
-                  onPressed: _onClosePressed,
-                  child: Text(S.current.close),
-                ),
-                const SizedBox(width: 8),
-              ],
-            ),
-            Row(
-              children: [
-                const SizedBox(width: 8),
-                TextButton(
-                  style: TextButton.styleFrom(iconSize: 16),
-                  onPressed: _onNReplacedPressed,
-                  child: Text(
-                    S.current.show_escape_characters +
-                        ": " +
-                        (showEscapeCharacters ? S.current.line_break_rendered : S.current.escape_characters_rendered),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                itemCount: stateLogList.length,
-                padding: const .only(bottom: 8),
-                itemBuilder: (context, index) {
-                  final log = stateLogList[index];
-                  final text = showEscapeCharacters ? log.text.replaceAll("\\n", "\n") : log.text;
-                  return Container(
-                    decoration: BoxDecoration(
-                      border: .all(color: qb.q(.5)),
-                      borderRadius: .circular(8),
+      borderRadius: const .only(
+        topLeft: .circular(16),
+        topRight: .circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: .stretch,
+        children: [
+          _StatePanelBar(
+            listPadding: _listPadding,
+            onRefresh: _onRefreshPressed,
+          ),
+          Expanded(
+            child: stateLogList.isEmpty
+                ? Center(
+                    child: Text(
+                      S.current.state_panel,
+                      style: TS(c: qb.q(.5), s: 14),
                     ),
-                    padding: const .all(4),
-                    margin: const .only(left: 8, top: 4, right: 8, bottom: 4),
-                    child: Column(
-                      crossAxisAlignment: .start,
-                      children: [
-                        const Text("Text: ", style: TS(w: .w700)),
-                        Text(text),
-                        const SizedBox(height: 4),
-                        const Text("Life Span: ", style: TS(w: .w700)),
-                        Text(log.lifeSpan.toString()),
-                      ],
+                  )
+                : ListView.builder(
+                    controller: scrollController,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: stateLogList.length,
+                    padding: .only(
+                      left: _listPadding,
+                      top: 8,
+                      right: _listPadding,
+                      bottom: _listPadding + 16,
                     ),
-                  );
-                },
+                    itemBuilder: (context, index) {
+                      final log = stateLogList[index];
+                      final textStyle = TS(c: qb.q(.9), s: 12).copyWith(
+                        fontFamily: 'monospace',
+                        fontFamilyFallback: const ['Menlo', 'Monaco', 'Courier'],
+                      );
+                      final symbolTextColor = textStyle.color ?? qb.q(.9);
+                      final formattedTextSpan = buildDebugPanelTextSpan(
+                        text: log.text,
+                        baseStyle: textStyle,
+                        renderNewlineDirectly: renderNewlineDirectly,
+                        renderSpaceSymbol: renderSpaceSymbol,
+                        spaceTextColor: symbolTextColor,
+                        spaceBackgroundColor: kC,
+                        newlineTextColor: symbolTextColor,
+                        newlineBackgroundColor: kC,
+                      );
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: appTheme.settingItem,
+                          borderRadius: .circular(8),
+                          border: .all(color: qb.q(.2), width: .5),
+                        ),
+                        padding: const .symmetric(horizontal: 10, vertical: 8),
+                        margin: const .only(bottom: 8),
+                        child: Column(
+                          crossAxisAlignment: .start,
+                          children: [
+                            Text(
+                              'Text:',
+                              style: TS(c: qb.q(.7), w: .w700, s: 12),
+                            ),
+                            const SizedBox(height: 4),
+                            SelectableText.rich(
+                              formattedTextSpan,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Life Span:',
+                              style: TS(c: qb.q(.7), w: .w700, s: 12),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              log.lifeSpan.toString(),
+                              style: TS(c: qb.q(.85), s: 13),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: .only(left: _listPadding, right: _listPadding, top: 8, bottom: 8 + paddingBottom),
+            decoration: BoxDecoration(
+              color: appTheme.settingItem,
+              border: Border(
+                top: BorderSide(color: theme.colorScheme.outlineVariant, width: .5),
               ),
             ),
-          ],
+            child: const DebugTextDisplaySettingsSection(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatePanelBar extends ConsumerWidget {
+  final double listPadding;
+  final VoidCallback onRefresh;
+
+  const _StatePanelBar({
+    required this.listPadding,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appTheme = ref.watch(P.app.theme);
+    final qb = ref.watch(P.app.qb);
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: kToolbarHeight - 4),
+      padding: const .only(top: 4),
+      decoration: BoxDecoration(
+        color: appTheme.settingItem,
+        border: Border(
+          bottom: BorderSide(color: qb.q(.12), width: .5),
         ),
+      ),
+      child: Row(
+        crossAxisAlignment: .center,
+        children: [
+          listPadding.w,
+          IconButton(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: S.current.refresh,
+            style: IconButton.styleFrom(visualDensity: .compact),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: .center,
+              mainAxisAlignment: .center,
+              children: [
+                Icon(Icons.dashboard_rounded, size: 20, color: appTheme.primary),
+                const SizedBox(width: 10),
+                Text(
+                  S.current.state_panel,
+                  style: const TS(s: 18, w: .w600),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: pop,
+            icon: const Icon(Icons.close_rounded),
+            tooltip: S.current.close,
+            style: IconButton.styleFrom(visualDensity: .compact),
+          ),
+          (listPadding + 4).w,
+        ],
       ),
     );
   }

@@ -1,8 +1,12 @@
+// Dart imports:
 import 'dart:io' show File;
 import 'dart:ui' as ui;
 
+// Flutter imports:
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary, OffsetLayer;
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gal/gal.dart' show Gal;
 import 'package:halo/halo.dart';
@@ -13,6 +17,8 @@ import 'package:path_provider/path_provider.dart' show getApplicationCacheDirect
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sprintf/sprintf.dart';
+
+// Project imports:
 import 'package:zone/config.dart' show Config;
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/message.dart' as model;
@@ -151,7 +157,6 @@ class _Preview extends ConsumerStatefulWidget {
 final kSharingRepaintBoundary = GlobalKey();
 
 class _PreviewState extends ConsumerState<_Preview> {
-
   late QrImage qrImage;
   late final ScrollController controller = ScrollController();
   File? imagePreview;
@@ -224,7 +229,7 @@ class _PreviewState extends ConsumerState<_Preview> {
     // FIXME: 注意, 新和成的图片尺寸仍然无法超过 16384, 需要找到新的方法
 
     // ignore: invalid_use_of_protected_member
-    final OffsetLayer offsetLayer = repaintBoundary.layer! as OffsetLayer;
+    final offsetLayer = repaintBoundary.layer! as OffsetLayer;
     final image = await offsetLayer.toImage(const Offset(0, 0) & imageSize, pixelRatio: finalDPI);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
@@ -235,7 +240,6 @@ class _PreviewState extends ConsumerState<_Preview> {
     await file.writeAsBytes(bytes);
     return file;
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -326,12 +330,12 @@ class _PreviewState extends ConsumerState<_Preview> {
   }
 
   Widget _shot(ThemeData theme, bool dark) {
-    final customTheme = ref.watch(P.app.customTheme);
+    final appTheme = ref.watch(P.app.theme);
     return SingleChildScrollView(
       child: RepaintBoundary(
         key: kSharingRepaintBoundary,
         child: ColoredBox(
-          color: customTheme.scaffold,
+          color: appTheme.scaffoldBg,
           child: Column(
             children: [
               const SizedBox(height: 12),

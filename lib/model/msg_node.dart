@@ -1,5 +1,7 @@
+// Dart imports:
 import 'dart:convert';
 
+// Package imports:
 import 'package:halo/halo.dart';
 
 // msg_node.dart
@@ -161,7 +163,7 @@ final class MsgNode {
       };
     }).toList();
 
-    final Map<String, dynamic> jsonMap = {
+    final jsonMap = <String, dynamic>{
       'root_id': rootNode.id,
       'nodes': nodeList,
     };
@@ -174,7 +176,7 @@ final class MsgNode {
     final int rootId = jsonMap['root_id'];
     final List<dynamic> nodeList = jsonMap['nodes'];
 
-    final Map<int, MsgNode> nodesById = {};
+    final nodesById = <int, MsgNode>{};
 
     for (final nodeData in nodeList) {
       final int id = nodeData['id'];

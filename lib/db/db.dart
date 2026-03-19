@@ -1,20 +1,18 @@
-// ignore: unused_import
-import 'dart:developer';
-
+// Package imports:
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:path_provider/path_provider.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
+import 'package:zone/db/db.steps.dart';
 import 'package:zone/model/message.dart' as model;
 import 'package:zone/model/message_type.dart' as model;
 import 'package:zone/model/msg_node.dart';
 import 'package:zone/model/ref_info.dart' as model;
 import 'package:zone/store/p.dart';
-import 'dart:convert';
-
-import 'db.steps.dart';
 
 part 'db.g.dart';
 
@@ -79,12 +77,6 @@ class _Msg extends Table {
 
   TextColumn get ttsInstruction => text().nullable()();
 
-  RealColumn get ttsOverallProgress => real().nullable()();
-
-  TextColumn get ttsPerWavProgress => text().nullable()();
-
-  TextColumn get ttsFilePaths => text().nullable()();
-
   TextColumn get modelName => text().nullable()();
 
   TextColumn get runningMode => text().nullable()();
@@ -92,14 +84,36 @@ class _Msg extends Table {
   TextColumn get build => text()();
 
   TextColumn get rawDecodeParams => text().nullable()();
+
+  RealColumn get prefillSpeed => real().nullable()();
+
+  RealColumn get decodeSpeed => real().nullable()();
+
+  IntColumn get messageTokensCount => integer().nullable()();
+
+  IntColumn get conversationTokensCount => integer().nullable()();
+}
+
+class _ConversationTitleRepairCandidate {
+  final int createdAtUS;
+  final int firstMsgId;
+  final String title;
+
+  const _ConversationTitleRepairCandidate({
+    required this.createdAtUS,
+    required this.firstMsgId,
+    required this.title,
+  });
 }
 
 @DriftDatabase(tables: [_Conversation, _Msg])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
+  bool _didRepairLegacyConversationTitles = false;
+
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration {
@@ -113,6 +127,18 @@ class AppDatabase extends _$AppDatabase {
         },
         from3To4: (m, schema) async {
           await m.addColumn(schema.msg, schema.msg.rawDecodeParams);
+        },
+        from4To5: (m, schema) async {
+          // ignore: experimental_member_use
+          await m.alterTable(TableMigration(schema.msg));
+        },
+        from5To6: (m, schema) async {
+          await m.addColumn(schema.msg, schema.msg.prefillSpeed);
+          await m.addColumn(schema.msg, schema.msg.decodeSpeed);
+        },
+        from6To7: (m, schema) async {
+          await m.addColumn(schema.msg, schema.msg.messageTokensCount);
+          await m.addColumn(schema.msg, schema.msg.conversationTokensCount);
         },
       ),
       beforeOpen: (details) async {
@@ -174,19 +200,141 @@ class AppDatabase extends _$AppDatabase {
       ttsSpeakerName: Value(message.ttsSpeakerName),
       ttsSourceAudioPath: Value(message.ttsSourceAudioPath),
       ttsInstruction: Value(message.ttsInstruction),
-      ttsOverallProgress: Value(message.ttsOverallProgress),
-      ttsPerWavProgress: Value(message.ttsPerWavProgress != null ? json.encode(message.ttsPerWavProgress) : null),
-      ttsFilePaths: Value(message.ttsFilePaths != null ? json.encode(message.ttsFilePaths) : null),
       modelName: Value(message.modelName),
       runningMode: Value(message.runningMode),
       build: P.app.buildNumber.q,
       rawDecodeParams: Value(message.rawDecodeParams),
+      prefillSpeed: Value(message.prefillSpeed),
+      decodeSpeed: Value(message.decodeSpeed),
+      messageTokensCount: Value(message.messageTokensCount),
+      conversationTokensCount: Value(message.conversationTokensCount),
     );
   }
 
   Future<List<model.Message>> getMessagesByIds(Iterable<int> ids) async {
     final msgDataList = await (select(msg)..where((tbl) => tbl.id.isIn(ids))).get();
     return msgDataList.map((msgData) => _msgDataToMessage(msgData)).toList();
+  }
+
+  String _stripUserMsgModifier(String text) {
+    final String separator = Config.userMsgModifierSep;
+    String processed = text.split(separator).first.trimRight();
+    if (processed.isEmpty) {
+      return processed;
+    }
+
+    final partialPrefixes = List<String>.generate(
+      separator.length - 1,
+      (int index) => separator.substring(0, separator.length - 1 - index),
+    );
+
+    for (final partialPrefix in partialPrefixes) {
+      if (!processed.endsWith(partialPrefix)) {
+        continue;
+      }
+      return processed.substring(0, processed.length - partialPrefix.length).trimRight();
+    }
+    return processed;
+  }
+
+  String _buildConversationTitle(String rawContent) {
+    final withoutModifier = _stripUserMsgModifier(rawContent);
+    final normalized = withoutModifier.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty) {
+      return normalized;
+    }
+    if (normalized.length <= Config.maxTitleLength) {
+      return normalized;
+    }
+    final truncated = normalized.substring(0, Config.maxTitleLength);
+    final lastWhitespaceIndex = truncated.lastIndexOf(RegExp(r'\s'));
+    if (lastWhitespaceIndex < Config.maxTitleLength ~/ 2) {
+      return truncated.trimRight();
+    }
+    return truncated.substring(0, lastWhitespaceIndex).trimRight();
+  }
+
+  String _buildLegacyConversationTitle(String rawContent) {
+    if (rawContent.length <= Config.legacyMaxTitleLength) {
+      return rawContent;
+    }
+    return rawContent.substring(0, Config.legacyMaxTitleLength);
+  }
+
+  Future<bool> _updateConvTitleWithoutTouchingUpdatedAt(int createAtInUS, String title) async {
+    final success =
+        await (update(conversation)..where((tbl) => tbl.createdAtUS.equals(createAtInUS))).write(
+          _ConversationCompanion(title: Value(title)),
+        ) >
+        0;
+    return success;
+  }
+
+  Future<bool> _repairLegacyTruncatedTitles(List<ConversationData> conversations) async {
+    if (_didRepairLegacyConversationTitles) {
+      return false;
+    }
+    _didRepairLegacyConversationTitles = true;
+    final candidates = <_ConversationTitleRepairCandidate>[];
+    for (final conversationData in conversations) {
+      if (conversationData.title.length != Config.legacyMaxTitleLength) {
+        continue;
+      }
+      late final MsgNode msgNode;
+      try {
+        msgNode = MsgNode.fromJson(
+          conversationData.data,
+          createAtInUS: conversationData.createdAtUS,
+        );
+      } catch (e) {
+        qqe("repair title: parse MsgNode failed, createAtUS=${conversationData.createdAtUS}, error=$e");
+        continue;
+      }
+      final firstMsgId = msgNode.latestMsgIdsWithoutRoot.firstOrNull;
+      if (firstMsgId == null) {
+        continue;
+      }
+      candidates.add(
+        _ConversationTitleRepairCandidate(
+          createdAtUS: conversationData.createdAtUS,
+          firstMsgId: firstMsgId,
+          title: conversationData.title,
+        ),
+      );
+    }
+    if (candidates.isEmpty) {
+      return false;
+    }
+
+    final firstMsgIds = <int>{
+      for (final _ConversationTitleRepairCandidate candidate in candidates) candidate.firstMsgId,
+    };
+    final firstMsgDataList = await (select(msg)..where((tbl) => tbl.id.isIn(firstMsgIds))).get();
+    final firstMsgById = <int, _MsgData>{
+      for (final _MsgData firstMsgData in firstMsgDataList) firstMsgData.id: firstMsgData,
+    };
+
+    bool hasRepairedTitle = false;
+    for (final _ConversationTitleRepairCandidate candidate in candidates) {
+      final _MsgData? firstMsgData = firstMsgById[candidate.firstMsgId];
+      if (firstMsgData == null) {
+        continue;
+      }
+      final legacyTitle = _buildLegacyConversationTitle(firstMsgData.content);
+      if (legacyTitle != candidate.title) {
+        continue;
+      }
+      final repairedTitle = _buildConversationTitle(firstMsgData.content);
+      if (repairedTitle == candidate.title) {
+        continue;
+      }
+      final updated = await _updateConvTitleWithoutTouchingUpdatedAt(candidate.createdAtUS, repairedTitle);
+      if (!updated) {
+        continue;
+      }
+      hasRepairedTitle = true;
+    }
+    return hasRepairedTitle;
   }
 
   _ConversationCompanion _conversationToConversationCompanion(MsgNode msgNode, {required String title}) {
@@ -216,7 +364,7 @@ class AppDatabase extends _$AppDatabase {
     if (firstMsgId != null) {
       final firstMsg = P.msg.pool.q[firstMsgId];
       final firstMsgContent = firstMsg?.content ?? "";
-      title = firstMsgContent.length > Config.maxTitleLength ? firstMsgContent.substring(0, Config.maxTitleLength) : firstMsgContent;
+      title = _buildConversationTitle(firstMsgContent);
     } else {
       title = P.preference.currentLangIsZh.q ? "新会话" : "New Conversation";
     }
@@ -277,6 +425,11 @@ class AppDatabase extends _$AppDatabase {
       ])
       ..limit(pageSize, offset: pageIndex * pageSize);
 
+    final conversationDataList = await query.get();
+    final hasRepairedTitles = await _repairLegacyTruncatedTitles(conversationDataList);
+    if (!hasRepairedTitles) {
+      return conversationDataList;
+    }
     return await query.get();
   }
 
@@ -297,18 +450,6 @@ class AppDatabase extends _$AppDatabase {
 }
 
 model.Message _msgDataToMessage(_MsgData msgData) {
-  List<double>? ttsPerWavProgress;
-  if (msgData.ttsPerWavProgress != null && msgData.ttsPerWavProgress!.isNotEmpty) {
-    final List<dynamic> parsed = json.decode(msgData.ttsPerWavProgress!);
-    ttsPerWavProgress = parsed.cast<double>();
-  }
-
-  List<String>? ttsFilePaths;
-  if (msgData.ttsFilePaths != null && msgData.ttsFilePaths!.isNotEmpty) {
-    final List<dynamic> parsed = json.decode(msgData.ttsFilePaths!);
-    ttsFilePaths = parsed.cast<String>();
-  }
-
   return model.Message(
     id: msgData.id,
     content: msgData.content,
@@ -326,11 +467,12 @@ model.Message _msgDataToMessage(_MsgData msgData) {
     ttsInstruction: msgData.ttsInstruction,
     ttsCFMSteps: msgData.ttsCFMSteps,
     isSensitive: msgData.isSensitive,
-    ttsOverallProgress: msgData.ttsOverallProgress,
-    ttsPerWavProgress: ttsPerWavProgress,
-    ttsFilePaths: ttsFilePaths,
     modelName: msgData.modelName,
     runningMode: msgData.runningMode,
     rawDecodeParams: msgData.rawDecodeParams,
+    prefillSpeed: msgData.prefillSpeed,
+    decodeSpeed: msgData.decodeSpeed,
+    messageTokensCount: msgData.messageTokensCount,
+    conversationTokensCount: msgData.conversationTokensCount,
   );
 }

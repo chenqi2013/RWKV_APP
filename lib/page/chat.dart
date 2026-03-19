@@ -1,21 +1,22 @@
-// ignore: unused_import
-import 'dart:developer';
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
+
+// Project imports:
+import 'package:zone/func/extensions/num.dart';
 import 'package:zone/model/message.dart' as model;
 import 'package:zone/model/message_type.dart' as model;
 import 'package:zone/model/world_type.dart';
-import 'package:zone/func/extensions/num.dart';
 import 'package:zone/store/p.dart';
-import 'package:zone/widgets/gradient_background.dart';
+import 'package:zone/widgets/chat/empty.dart';
+import 'package:zone/widgets/chat/share_chat_sheet.dart';
 import 'package:zone/widgets/chat_app_bar.dart';
 import 'package:zone/widgets/input_bar.dart';
-import 'package:zone/widgets/chat/empty.dart';
 import 'package:zone/widgets/message.dart';
-import 'package:zone/widgets/chat/share_chat_sheet.dart';
 import 'package:zone/widgets/model_selector.dart';
 
 class PageChat extends StatefulWidget {
@@ -67,7 +68,6 @@ class _Page extends ConsumerWidget {
     return Scaffold(
       body: Stack(
         children: [
-          const GradientBackground(child: SizedBox()),
           const _List(),
           const Empty(),
           const Positioned(
@@ -76,14 +76,8 @@ class _Page extends ConsumerWidget {
             right: 0,
             child: ChatAppBar(),
           ),
+          if (!selectMessageMode) const InputBar(),
           if (selectMessageMode) const Positioned.fill(child: ShareChatSheet()),
-          if (!selectMessageMode)
-            const Positioned(
-              bottom: 0,
-              right: 0,
-              left: 0,
-              child: InputBar(),
-            ),
         ],
       ),
     );
@@ -102,7 +96,7 @@ class _List extends ConsumerWidget {
     final inputHeight = ref.watch(P.chat.inputHeight);
 
     double top = paddingTop + kToolbarHeight + 4;
-    double bottom = inputHeight + 12;
+    double bottom = inputHeight;
     double scrollBarBottom = inputHeight + 4;
 
     final currentWorldType = ref.watch(P.rwkv.currentWorldType);
@@ -122,7 +116,7 @@ class _List extends ConsumerWidget {
 
     final qb = ref.watch(P.app.qb);
 
-    // return Positioned.fill(child: Container());
+    final isMobile = ref.watch(P.app.isMobile);
 
     return Positioned.fill(
       child: GestureDetector(
@@ -146,7 +140,7 @@ class _List extends ConsumerWidget {
               return _MessageWrap(msg: msg, finalIndex: finalIndex);
             },
             separatorBuilder: (context, index) {
-              return const SizedBox(height: 15);
+              return isMobile ? const SizedBox(height: 12) : const SizedBox(height: 4);
             },
           ),
         ),
@@ -168,6 +162,7 @@ class _MessageWrap extends ConsumerWidget {
     if (!selectMessageMode) {
       return Message(msg, finalIndex, selectMode: false);
     }
+
     final selectedIds = ref.watch(P.chat.sharingSelectedMsgIds);
     final selected = selectedIds.contains(msg.id);
 

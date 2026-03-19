@@ -1,10 +1,17 @@
-// ignore: unused_import
+// Dart imports:
+import 'dart:ui';
 
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/store/p.dart';
+import 'package:zone/widgets/chat/interaction_visual_state.dart';
 
 class SecondaryOptionsButton extends ConsumerWidget {
   const SecondaryOptionsButton({super.key});
@@ -15,68 +22,32 @@ class SecondaryOptionsButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
     final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
+    final s = S.of(context);
+    final fontSize = theme.textTheme.bodySmall?.fontSize ?? 10;
+    final appTheme = ref.watch(P.app.theme);
     final loading = ref.watch(P.rwkv.loading);
-
+    final generating = ref.watch(P.rwkv.generating);
+    final loaded = ref.watch(P.rwkv.loaded);
     final thinkingMode = ref.watch(P.rwkv.thinkingMode);
 
-    final color = switch (thinkingMode) {
-      .lighting => Colors.transparent,
-      .fast => Colors.transparent,
-      .free => theme.colorScheme.surfaceContainer,
-      .none => Colors.transparent,
-      .preferChinese => primary,
-      .en => primary,
-      .enShort => primary,
-      .enLong => primary,
+    final canEnable = loaded && !loading && !generating;
+    final interactionState = switch (thinkingMode) {
+      .preferChinese => canEnable ? InteractionVisualState.enabled : InteractionVisualState.unavailable,
+      .free => canEnable ? InteractionVisualState.available : InteractionVisualState.unavailable,
+      _ => InteractionVisualState.unavailable,
     };
-
-    final textColor = switch (thinkingMode) {
-      .lighting => Colors.grey,
-      .fast => Colors.grey,
-      .none => theme.colorScheme.onPrimary,
-      .free => Colors.grey,
-      .preferChinese => theme.colorScheme.onPrimary,
-      .en => theme.colorScheme.onPrimary,
-      .enShort => theme.colorScheme.onPrimary,
-      .enLong => theme.colorScheme.onPrimary,
-    };
-
-    final iconWidget = switch (thinkingMode) {
-      .free => Icon(Icons.translate, color: textColor, size: 18),
-      .preferChinese => Icon(Icons.translate, color: textColor, size: 18),
-      _ => null,
-    };
-
-    final textWidget = switch (thinkingMode) {
-      .lighting => null,
-      .none => null,
-      _ => Column(
-        crossAxisAlignment: .start,
-        mainAxisAlignment: .center,
-        children: [
-          Text(s.prefer, style: TS(c: textColor, s: 10, height: 1)),
-          const SizedBox(height: 2),
-          Text(s.chinese, style: TS(c: textColor, s: 10, height: 1)),
-        ],
-      ),
-    };
+    final colors = interactionVisualColors(appTheme: appTheme, state: interactionState);
+    final color = colors.background;
+    final textColor = colors.foreground;
+    final userBackdropFilterForInputOptions = ref.watch(P.ui.useBackdropFilterForInputOptions);
+    final backdropFilterBgAlphaForInputOptions = ref.watch(P.ui.backdropFilterBgAlphaForInputOptions);
+    final backdropFilterBgAlphaForInputOptionsDarkModifier = ref.watch(P.ui.backdropFilterBgAlphaForInputOptionsDarkModifier);
+    final sigmaForBackdropFilterForInputOptions = ref.watch(P.ui.sigmaForBackdropFilterForInputOptions);
 
     final textScaleFactor = MediaQuery.textScalerOf(context);
     final height = textScaleFactor.scale(14) + 20;
-
-    final EdgeInsets padding = switch (thinkingMode) {
-      .lighting => const .all(0),
-      .fast => const .all(0),
-      .none => const .all(0),
-      .free => const .symmetric(horizontal: 12),
-      .preferChinese => const .symmetric(horizontal: 12),
-      .en => const .symmetric(horizontal: 12),
-      .enShort => const .symmetric(horizontal: 12),
-      .enLong => const .symmetric(horizontal: 12),
-    };
+    const padding = EdgeInsets.symmetric(horizontal: 12);
 
     return AnimatedSize(
       key: const Key("_SecondaryOptionsButton"),
@@ -88,21 +59,62 @@ class SecondaryOptionsButton extends ConsumerWidget {
           duration: 250.ms,
           child: GestureDetector(
             onTap: _onTap,
-            child: AnimatedContainer(
-              height: height,
-              duration: 150.ms,
-              curve: Curves.easeOutCubic,
-              padding: padding,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: .circular(60),
-              ),
-              child: Row(
-                children: [
-                  ?iconWidget,
-                  if (textWidget != null) const SizedBox(width: 4),
-                  ?textWidget,
-                ],
+            child: ClipRRect(
+              borderRadius: .circular(60),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: sigmaForBackdropFilterForInputOptions.toDouble(),
+                  sigmaY: sigmaForBackdropFilterForInputOptions.toDouble(),
+                ),
+                enabled: userBackdropFilterForInputOptions,
+                child: AnimatedContainer(
+                  height: height,
+                  duration: 150.ms,
+                  curve: Curves.easeOutCubic,
+                  padding: padding,
+                  decoration: BoxDecoration(
+                    color: color.q(
+                      userBackdropFilterForInputOptions
+                          ? backdropFilterBgAlphaForInputOptions * backdropFilterBgAlphaForInputOptionsDarkModifier
+                          : 1,
+                    ),
+                    borderRadius: .circular(60),
+                    border: .all(color: colors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.translate, color: textColor, size: appTheme.inputBarInteractionsIconSize),
+                      const SizedBox(width: 4),
+                      Column(
+                        crossAxisAlignment: .start,
+                        mainAxisAlignment: .center,
+                        children: [
+                          Text(
+                            s.prefer,
+                            style: TS(c: textColor, s: fontSize, height: 1),
+                            strutStyle: StrutStyle(
+                              fontSize: fontSize,
+                              height: 1,
+                              forceStrutHeight: true,
+                              leadingDistribution: TextLeadingDistribution.even,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            s.chinese,
+                            style: TS(c: textColor, s: fontSize, height: 1),
+                            strutStyle: StrutStyle(
+                              fontSize: fontSize,
+                              height: 1,
+                              forceStrutHeight: true,
+                              leadingDistribution: TextLeadingDistribution.even,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

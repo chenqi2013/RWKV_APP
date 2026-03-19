@@ -608,40 +608,6 @@ class $_MsgTable extends _Msg with TableInfo<$_MsgTable, _MsgData> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _ttsOverallProgressMeta =
-      const VerificationMeta('ttsOverallProgress');
-  @override
-  late final GeneratedColumn<double> ttsOverallProgress =
-      GeneratedColumn<double>(
-        'tts_overall_progress',
-        aliasedName,
-        true,
-        type: DriftSqlType.double,
-        requiredDuringInsert: false,
-      );
-  static const VerificationMeta _ttsPerWavProgressMeta = const VerificationMeta(
-    'ttsPerWavProgress',
-  );
-  @override
-  late final GeneratedColumn<String> ttsPerWavProgress =
-      GeneratedColumn<String>(
-        'tts_per_wav_progress',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      );
-  static const VerificationMeta _ttsFilePathsMeta = const VerificationMeta(
-    'ttsFilePaths',
-  );
-  @override
-  late final GeneratedColumn<String> ttsFilePaths = GeneratedColumn<String>(
-    'tts_file_paths',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _modelNameMeta = const VerificationMeta(
     'modelName',
   );
@@ -684,6 +650,49 @@ class $_MsgTable extends _Msg with TableInfo<$_MsgTable, _MsgData> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _prefillSpeedMeta = const VerificationMeta(
+    'prefillSpeed',
+  );
+  @override
+  late final GeneratedColumn<double> prefillSpeed = GeneratedColumn<double>(
+    'prefill_speed',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _decodeSpeedMeta = const VerificationMeta(
+    'decodeSpeed',
+  );
+  @override
+  late final GeneratedColumn<double> decodeSpeed = GeneratedColumn<double>(
+    'decode_speed',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _messageTokensCountMeta =
+      const VerificationMeta('messageTokensCount');
+  @override
+  late final GeneratedColumn<int> messageTokensCount = GeneratedColumn<int>(
+    'message_tokens_count',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _conversationTokensCountMeta =
+      const VerificationMeta('conversationTokensCount');
+  @override
+  late final GeneratedColumn<int> conversationTokensCount =
+      GeneratedColumn<int>(
+        'conversation_tokens_count',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -702,13 +711,14 @@ class $_MsgTable extends _Msg with TableInfo<$_MsgTable, _MsgData> {
     ttsSpeakerName,
     ttsSourceAudioPath,
     ttsInstruction,
-    ttsOverallProgress,
-    ttsPerWavProgress,
-    ttsFilePaths,
     modelName,
     runningMode,
     build,
     rawDecodeParams,
+    prefillSpeed,
+    decodeSpeed,
+    messageTokensCount,
+    conversationTokensCount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -846,33 +856,6 @@ class $_MsgTable extends _Msg with TableInfo<$_MsgTable, _MsgData> {
         ),
       );
     }
-    if (data.containsKey('tts_overall_progress')) {
-      context.handle(
-        _ttsOverallProgressMeta,
-        ttsOverallProgress.isAcceptableOrUnknown(
-          data['tts_overall_progress']!,
-          _ttsOverallProgressMeta,
-        ),
-      );
-    }
-    if (data.containsKey('tts_per_wav_progress')) {
-      context.handle(
-        _ttsPerWavProgressMeta,
-        ttsPerWavProgress.isAcceptableOrUnknown(
-          data['tts_per_wav_progress']!,
-          _ttsPerWavProgressMeta,
-        ),
-      );
-    }
-    if (data.containsKey('tts_file_paths')) {
-      context.handle(
-        _ttsFilePathsMeta,
-        ttsFilePaths.isAcceptableOrUnknown(
-          data['tts_file_paths']!,
-          _ttsFilePathsMeta,
-        ),
-      );
-    }
     if (data.containsKey('model_name')) {
       context.handle(
         _modelNameMeta,
@@ -902,6 +885,42 @@ class $_MsgTable extends _Msg with TableInfo<$_MsgTable, _MsgData> {
         rawDecodeParams.isAcceptableOrUnknown(
           data['raw_decode_params']!,
           _rawDecodeParamsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('prefill_speed')) {
+      context.handle(
+        _prefillSpeedMeta,
+        prefillSpeed.isAcceptableOrUnknown(
+          data['prefill_speed']!,
+          _prefillSpeedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('decode_speed')) {
+      context.handle(
+        _decodeSpeedMeta,
+        decodeSpeed.isAcceptableOrUnknown(
+          data['decode_speed']!,
+          _decodeSpeedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('message_tokens_count')) {
+      context.handle(
+        _messageTokensCountMeta,
+        messageTokensCount.isAcceptableOrUnknown(
+          data['message_tokens_count']!,
+          _messageTokensCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('conversation_tokens_count')) {
+      context.handle(
+        _conversationTokensCountMeta,
+        conversationTokensCount.isAcceptableOrUnknown(
+          data['conversation_tokens_count']!,
+          _conversationTokensCountMeta,
         ),
       );
     }
@@ -978,18 +997,6 @@ class $_MsgTable extends _Msg with TableInfo<$_MsgTable, _MsgData> {
         DriftSqlType.string,
         data['${effectivePrefix}tts_instruction'],
       ),
-      ttsOverallProgress: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}tts_overall_progress'],
-      ),
-      ttsPerWavProgress: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tts_per_wav_progress'],
-      ),
-      ttsFilePaths: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tts_file_paths'],
-      ),
       modelName: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}model_name'],
@@ -1005,6 +1012,22 @@ class $_MsgTable extends _Msg with TableInfo<$_MsgTable, _MsgData> {
       rawDecodeParams: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}raw_decode_params'],
+      ),
+      prefillSpeed: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}prefill_speed'],
+      ),
+      decodeSpeed: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}decode_speed'],
+      ),
+      messageTokensCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}message_tokens_count'],
+      ),
+      conversationTokensCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}conversation_tokens_count'],
       ),
     );
   }
@@ -1032,13 +1055,14 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
   final String? ttsSpeakerName;
   final String? ttsSourceAudioPath;
   final String? ttsInstruction;
-  final double? ttsOverallProgress;
-  final String? ttsPerWavProgress;
-  final String? ttsFilePaths;
   final String? modelName;
   final String? runningMode;
   final String build;
   final String? rawDecodeParams;
+  final double? prefillSpeed;
+  final double? decodeSpeed;
+  final int? messageTokensCount;
+  final int? conversationTokensCount;
   const _MsgData({
     required this.id,
     required this.content,
@@ -1056,13 +1080,14 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
     this.ttsSpeakerName,
     this.ttsSourceAudioPath,
     this.ttsInstruction,
-    this.ttsOverallProgress,
-    this.ttsPerWavProgress,
-    this.ttsFilePaths,
     this.modelName,
     this.runningMode,
     required this.build,
     this.rawDecodeParams,
+    this.prefillSpeed,
+    this.decodeSpeed,
+    this.messageTokensCount,
+    this.conversationTokensCount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1101,15 +1126,6 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
     if (!nullToAbsent || ttsInstruction != null) {
       map['tts_instruction'] = Variable<String>(ttsInstruction);
     }
-    if (!nullToAbsent || ttsOverallProgress != null) {
-      map['tts_overall_progress'] = Variable<double>(ttsOverallProgress);
-    }
-    if (!nullToAbsent || ttsPerWavProgress != null) {
-      map['tts_per_wav_progress'] = Variable<String>(ttsPerWavProgress);
-    }
-    if (!nullToAbsent || ttsFilePaths != null) {
-      map['tts_file_paths'] = Variable<String>(ttsFilePaths);
-    }
     if (!nullToAbsent || modelName != null) {
       map['model_name'] = Variable<String>(modelName);
     }
@@ -1119,6 +1135,18 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
     map['build'] = Variable<String>(build);
     if (!nullToAbsent || rawDecodeParams != null) {
       map['raw_decode_params'] = Variable<String>(rawDecodeParams);
+    }
+    if (!nullToAbsent || prefillSpeed != null) {
+      map['prefill_speed'] = Variable<double>(prefillSpeed);
+    }
+    if (!nullToAbsent || decodeSpeed != null) {
+      map['decode_speed'] = Variable<double>(decodeSpeed);
+    }
+    if (!nullToAbsent || messageTokensCount != null) {
+      map['message_tokens_count'] = Variable<int>(messageTokensCount);
+    }
+    if (!nullToAbsent || conversationTokensCount != null) {
+      map['conversation_tokens_count'] = Variable<int>(conversationTokensCount);
     }
     return map;
   }
@@ -1159,15 +1187,6 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
       ttsInstruction: ttsInstruction == null && nullToAbsent
           ? const Value.absent()
           : Value(ttsInstruction),
-      ttsOverallProgress: ttsOverallProgress == null && nullToAbsent
-          ? const Value.absent()
-          : Value(ttsOverallProgress),
-      ttsPerWavProgress: ttsPerWavProgress == null && nullToAbsent
-          ? const Value.absent()
-          : Value(ttsPerWavProgress),
-      ttsFilePaths: ttsFilePaths == null && nullToAbsent
-          ? const Value.absent()
-          : Value(ttsFilePaths),
       modelName: modelName == null && nullToAbsent
           ? const Value.absent()
           : Value(modelName),
@@ -1178,6 +1197,18 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
       rawDecodeParams: rawDecodeParams == null && nullToAbsent
           ? const Value.absent()
           : Value(rawDecodeParams),
+      prefillSpeed: prefillSpeed == null && nullToAbsent
+          ? const Value.absent()
+          : Value(prefillSpeed),
+      decodeSpeed: decodeSpeed == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decodeSpeed),
+      messageTokensCount: messageTokensCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(messageTokensCount),
+      conversationTokensCount: conversationTokensCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conversationTokensCount),
     );
   }
 
@@ -1205,17 +1236,16 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
         json['ttsSourceAudioPath'],
       ),
       ttsInstruction: serializer.fromJson<String?>(json['ttsInstruction']),
-      ttsOverallProgress: serializer.fromJson<double?>(
-        json['ttsOverallProgress'],
-      ),
-      ttsPerWavProgress: serializer.fromJson<String?>(
-        json['ttsPerWavProgress'],
-      ),
-      ttsFilePaths: serializer.fromJson<String?>(json['ttsFilePaths']),
       modelName: serializer.fromJson<String?>(json['modelName']),
       runningMode: serializer.fromJson<String?>(json['runningMode']),
       build: serializer.fromJson<String>(json['build']),
       rawDecodeParams: serializer.fromJson<String?>(json['rawDecodeParams']),
+      prefillSpeed: serializer.fromJson<double?>(json['prefillSpeed']),
+      decodeSpeed: serializer.fromJson<double?>(json['decodeSpeed']),
+      messageTokensCount: serializer.fromJson<int?>(json['messageTokensCount']),
+      conversationTokensCount: serializer.fromJson<int?>(
+        json['conversationTokensCount'],
+      ),
     );
   }
   @override
@@ -1238,13 +1268,16 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
       'ttsSpeakerName': serializer.toJson<String?>(ttsSpeakerName),
       'ttsSourceAudioPath': serializer.toJson<String?>(ttsSourceAudioPath),
       'ttsInstruction': serializer.toJson<String?>(ttsInstruction),
-      'ttsOverallProgress': serializer.toJson<double?>(ttsOverallProgress),
-      'ttsPerWavProgress': serializer.toJson<String?>(ttsPerWavProgress),
-      'ttsFilePaths': serializer.toJson<String?>(ttsFilePaths),
       'modelName': serializer.toJson<String?>(modelName),
       'runningMode': serializer.toJson<String?>(runningMode),
       'build': serializer.toJson<String>(build),
       'rawDecodeParams': serializer.toJson<String?>(rawDecodeParams),
+      'prefillSpeed': serializer.toJson<double?>(prefillSpeed),
+      'decodeSpeed': serializer.toJson<double?>(decodeSpeed),
+      'messageTokensCount': serializer.toJson<int?>(messageTokensCount),
+      'conversationTokensCount': serializer.toJson<int?>(
+        conversationTokensCount,
+      ),
     };
   }
 
@@ -1265,13 +1298,14 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
     Value<String?> ttsSpeakerName = const Value.absent(),
     Value<String?> ttsSourceAudioPath = const Value.absent(),
     Value<String?> ttsInstruction = const Value.absent(),
-    Value<double?> ttsOverallProgress = const Value.absent(),
-    Value<String?> ttsPerWavProgress = const Value.absent(),
-    Value<String?> ttsFilePaths = const Value.absent(),
     Value<String?> modelName = const Value.absent(),
     Value<String?> runningMode = const Value.absent(),
     String? build,
     Value<String?> rawDecodeParams = const Value.absent(),
+    Value<double?> prefillSpeed = const Value.absent(),
+    Value<double?> decodeSpeed = const Value.absent(),
+    Value<int?> messageTokensCount = const Value.absent(),
+    Value<int?> conversationTokensCount = const Value.absent(),
   }) => _MsgData(
     id: id ?? this.id,
     content: content ?? this.content,
@@ -1295,19 +1329,20 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
     ttsInstruction: ttsInstruction.present
         ? ttsInstruction.value
         : this.ttsInstruction,
-    ttsOverallProgress: ttsOverallProgress.present
-        ? ttsOverallProgress.value
-        : this.ttsOverallProgress,
-    ttsPerWavProgress: ttsPerWavProgress.present
-        ? ttsPerWavProgress.value
-        : this.ttsPerWavProgress,
-    ttsFilePaths: ttsFilePaths.present ? ttsFilePaths.value : this.ttsFilePaths,
     modelName: modelName.present ? modelName.value : this.modelName,
     runningMode: runningMode.present ? runningMode.value : this.runningMode,
     build: build ?? this.build,
     rawDecodeParams: rawDecodeParams.present
         ? rawDecodeParams.value
         : this.rawDecodeParams,
+    prefillSpeed: prefillSpeed.present ? prefillSpeed.value : this.prefillSpeed,
+    decodeSpeed: decodeSpeed.present ? decodeSpeed.value : this.decodeSpeed,
+    messageTokensCount: messageTokensCount.present
+        ? messageTokensCount.value
+        : this.messageTokensCount,
+    conversationTokensCount: conversationTokensCount.present
+        ? conversationTokensCount.value
+        : this.conversationTokensCount,
   );
   _MsgData copyWithCompanion(_MsgCompanion data) {
     return _MsgData(
@@ -1341,15 +1376,6 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
       ttsInstruction: data.ttsInstruction.present
           ? data.ttsInstruction.value
           : this.ttsInstruction,
-      ttsOverallProgress: data.ttsOverallProgress.present
-          ? data.ttsOverallProgress.value
-          : this.ttsOverallProgress,
-      ttsPerWavProgress: data.ttsPerWavProgress.present
-          ? data.ttsPerWavProgress.value
-          : this.ttsPerWavProgress,
-      ttsFilePaths: data.ttsFilePaths.present
-          ? data.ttsFilePaths.value
-          : this.ttsFilePaths,
       modelName: data.modelName.present ? data.modelName.value : this.modelName,
       runningMode: data.runningMode.present
           ? data.runningMode.value
@@ -1358,6 +1384,18 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
       rawDecodeParams: data.rawDecodeParams.present
           ? data.rawDecodeParams.value
           : this.rawDecodeParams,
+      prefillSpeed: data.prefillSpeed.present
+          ? data.prefillSpeed.value
+          : this.prefillSpeed,
+      decodeSpeed: data.decodeSpeed.present
+          ? data.decodeSpeed.value
+          : this.decodeSpeed,
+      messageTokensCount: data.messageTokensCount.present
+          ? data.messageTokensCount.value
+          : this.messageTokensCount,
+      conversationTokensCount: data.conversationTokensCount.present
+          ? data.conversationTokensCount.value
+          : this.conversationTokensCount,
     );
   }
 
@@ -1380,13 +1418,14 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
           ..write('ttsSpeakerName: $ttsSpeakerName, ')
           ..write('ttsSourceAudioPath: $ttsSourceAudioPath, ')
           ..write('ttsInstruction: $ttsInstruction, ')
-          ..write('ttsOverallProgress: $ttsOverallProgress, ')
-          ..write('ttsPerWavProgress: $ttsPerWavProgress, ')
-          ..write('ttsFilePaths: $ttsFilePaths, ')
           ..write('modelName: $modelName, ')
           ..write('runningMode: $runningMode, ')
           ..write('build: $build, ')
-          ..write('rawDecodeParams: $rawDecodeParams')
+          ..write('rawDecodeParams: $rawDecodeParams, ')
+          ..write('prefillSpeed: $prefillSpeed, ')
+          ..write('decodeSpeed: $decodeSpeed, ')
+          ..write('messageTokensCount: $messageTokensCount, ')
+          ..write('conversationTokensCount: $conversationTokensCount')
           ..write(')'))
         .toString();
   }
@@ -1409,13 +1448,14 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
     ttsSpeakerName,
     ttsSourceAudioPath,
     ttsInstruction,
-    ttsOverallProgress,
-    ttsPerWavProgress,
-    ttsFilePaths,
     modelName,
     runningMode,
     build,
     rawDecodeParams,
+    prefillSpeed,
+    decodeSpeed,
+    messageTokensCount,
+    conversationTokensCount,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1437,13 +1477,14 @@ class _MsgData extends DataClass implements Insertable<_MsgData> {
           other.ttsSpeakerName == this.ttsSpeakerName &&
           other.ttsSourceAudioPath == this.ttsSourceAudioPath &&
           other.ttsInstruction == this.ttsInstruction &&
-          other.ttsOverallProgress == this.ttsOverallProgress &&
-          other.ttsPerWavProgress == this.ttsPerWavProgress &&
-          other.ttsFilePaths == this.ttsFilePaths &&
           other.modelName == this.modelName &&
           other.runningMode == this.runningMode &&
           other.build == this.build &&
-          other.rawDecodeParams == this.rawDecodeParams);
+          other.rawDecodeParams == this.rawDecodeParams &&
+          other.prefillSpeed == this.prefillSpeed &&
+          other.decodeSpeed == this.decodeSpeed &&
+          other.messageTokensCount == this.messageTokensCount &&
+          other.conversationTokensCount == this.conversationTokensCount);
 }
 
 class _MsgCompanion extends UpdateCompanion<_MsgData> {
@@ -1463,13 +1504,14 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
   final Value<String?> ttsSpeakerName;
   final Value<String?> ttsSourceAudioPath;
   final Value<String?> ttsInstruction;
-  final Value<double?> ttsOverallProgress;
-  final Value<String?> ttsPerWavProgress;
-  final Value<String?> ttsFilePaths;
   final Value<String?> modelName;
   final Value<String?> runningMode;
   final Value<String> build;
   final Value<String?> rawDecodeParams;
+  final Value<double?> prefillSpeed;
+  final Value<double?> decodeSpeed;
+  final Value<int?> messageTokensCount;
+  final Value<int?> conversationTokensCount;
   const _MsgCompanion({
     this.id = const Value.absent(),
     this.content = const Value.absent(),
@@ -1487,13 +1529,14 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
     this.ttsSpeakerName = const Value.absent(),
     this.ttsSourceAudioPath = const Value.absent(),
     this.ttsInstruction = const Value.absent(),
-    this.ttsOverallProgress = const Value.absent(),
-    this.ttsPerWavProgress = const Value.absent(),
-    this.ttsFilePaths = const Value.absent(),
     this.modelName = const Value.absent(),
     this.runningMode = const Value.absent(),
     this.build = const Value.absent(),
     this.rawDecodeParams = const Value.absent(),
+    this.prefillSpeed = const Value.absent(),
+    this.decodeSpeed = const Value.absent(),
+    this.messageTokensCount = const Value.absent(),
+    this.conversationTokensCount = const Value.absent(),
   });
   _MsgCompanion.insert({
     this.id = const Value.absent(),
@@ -1512,13 +1555,14 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
     this.ttsSpeakerName = const Value.absent(),
     this.ttsSourceAudioPath = const Value.absent(),
     this.ttsInstruction = const Value.absent(),
-    this.ttsOverallProgress = const Value.absent(),
-    this.ttsPerWavProgress = const Value.absent(),
-    this.ttsFilePaths = const Value.absent(),
     this.modelName = const Value.absent(),
     this.runningMode = const Value.absent(),
     required String build,
     this.rawDecodeParams = const Value.absent(),
+    this.prefillSpeed = const Value.absent(),
+    this.decodeSpeed = const Value.absent(),
+    this.messageTokensCount = const Value.absent(),
+    this.conversationTokensCount = const Value.absent(),
   }) : content = Value(content),
        isMine = Value(isMine),
        type = Value(type),
@@ -1542,13 +1586,14 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
     Expression<String>? ttsSpeakerName,
     Expression<String>? ttsSourceAudioPath,
     Expression<String>? ttsInstruction,
-    Expression<double>? ttsOverallProgress,
-    Expression<String>? ttsPerWavProgress,
-    Expression<String>? ttsFilePaths,
     Expression<String>? modelName,
     Expression<String>? runningMode,
     Expression<String>? build,
     Expression<String>? rawDecodeParams,
+    Expression<double>? prefillSpeed,
+    Expression<double>? decodeSpeed,
+    Expression<int>? messageTokensCount,
+    Expression<int>? conversationTokensCount,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1568,14 +1613,16 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
       if (ttsSourceAudioPath != null)
         'tts_source_audio_path': ttsSourceAudioPath,
       if (ttsInstruction != null) 'tts_instruction': ttsInstruction,
-      if (ttsOverallProgress != null)
-        'tts_overall_progress': ttsOverallProgress,
-      if (ttsPerWavProgress != null) 'tts_per_wav_progress': ttsPerWavProgress,
-      if (ttsFilePaths != null) 'tts_file_paths': ttsFilePaths,
       if (modelName != null) 'model_name': modelName,
       if (runningMode != null) 'running_mode': runningMode,
       if (build != null) 'build': build,
       if (rawDecodeParams != null) 'raw_decode_params': rawDecodeParams,
+      if (prefillSpeed != null) 'prefill_speed': prefillSpeed,
+      if (decodeSpeed != null) 'decode_speed': decodeSpeed,
+      if (messageTokensCount != null)
+        'message_tokens_count': messageTokensCount,
+      if (conversationTokensCount != null)
+        'conversation_tokens_count': conversationTokensCount,
     });
   }
 
@@ -1596,13 +1643,14 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
     Value<String?>? ttsSpeakerName,
     Value<String?>? ttsSourceAudioPath,
     Value<String?>? ttsInstruction,
-    Value<double?>? ttsOverallProgress,
-    Value<String?>? ttsPerWavProgress,
-    Value<String?>? ttsFilePaths,
     Value<String?>? modelName,
     Value<String?>? runningMode,
     Value<String>? build,
     Value<String?>? rawDecodeParams,
+    Value<double?>? prefillSpeed,
+    Value<double?>? decodeSpeed,
+    Value<int?>? messageTokensCount,
+    Value<int?>? conversationTokensCount,
   }) {
     return _MsgCompanion(
       id: id ?? this.id,
@@ -1621,13 +1669,15 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
       ttsSpeakerName: ttsSpeakerName ?? this.ttsSpeakerName,
       ttsSourceAudioPath: ttsSourceAudioPath ?? this.ttsSourceAudioPath,
       ttsInstruction: ttsInstruction ?? this.ttsInstruction,
-      ttsOverallProgress: ttsOverallProgress ?? this.ttsOverallProgress,
-      ttsPerWavProgress: ttsPerWavProgress ?? this.ttsPerWavProgress,
-      ttsFilePaths: ttsFilePaths ?? this.ttsFilePaths,
       modelName: modelName ?? this.modelName,
       runningMode: runningMode ?? this.runningMode,
       build: build ?? this.build,
       rawDecodeParams: rawDecodeParams ?? this.rawDecodeParams,
+      prefillSpeed: prefillSpeed ?? this.prefillSpeed,
+      decodeSpeed: decodeSpeed ?? this.decodeSpeed,
+      messageTokensCount: messageTokensCount ?? this.messageTokensCount,
+      conversationTokensCount:
+          conversationTokensCount ?? this.conversationTokensCount,
     );
   }
 
@@ -1682,15 +1732,6 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
     if (ttsInstruction.present) {
       map['tts_instruction'] = Variable<String>(ttsInstruction.value);
     }
-    if (ttsOverallProgress.present) {
-      map['tts_overall_progress'] = Variable<double>(ttsOverallProgress.value);
-    }
-    if (ttsPerWavProgress.present) {
-      map['tts_per_wav_progress'] = Variable<String>(ttsPerWavProgress.value);
-    }
-    if (ttsFilePaths.present) {
-      map['tts_file_paths'] = Variable<String>(ttsFilePaths.value);
-    }
     if (modelName.present) {
       map['model_name'] = Variable<String>(modelName.value);
     }
@@ -1702,6 +1743,20 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
     }
     if (rawDecodeParams.present) {
       map['raw_decode_params'] = Variable<String>(rawDecodeParams.value);
+    }
+    if (prefillSpeed.present) {
+      map['prefill_speed'] = Variable<double>(prefillSpeed.value);
+    }
+    if (decodeSpeed.present) {
+      map['decode_speed'] = Variable<double>(decodeSpeed.value);
+    }
+    if (messageTokensCount.present) {
+      map['message_tokens_count'] = Variable<int>(messageTokensCount.value);
+    }
+    if (conversationTokensCount.present) {
+      map['conversation_tokens_count'] = Variable<int>(
+        conversationTokensCount.value,
+      );
     }
     return map;
   }
@@ -1725,13 +1780,14 @@ class _MsgCompanion extends UpdateCompanion<_MsgData> {
           ..write('ttsSpeakerName: $ttsSpeakerName, ')
           ..write('ttsSourceAudioPath: $ttsSourceAudioPath, ')
           ..write('ttsInstruction: $ttsInstruction, ')
-          ..write('ttsOverallProgress: $ttsOverallProgress, ')
-          ..write('ttsPerWavProgress: $ttsPerWavProgress, ')
-          ..write('ttsFilePaths: $ttsFilePaths, ')
           ..write('modelName: $modelName, ')
           ..write('runningMode: $runningMode, ')
           ..write('build: $build, ')
-          ..write('rawDecodeParams: $rawDecodeParams')
+          ..write('rawDecodeParams: $rawDecodeParams, ')
+          ..write('prefillSpeed: $prefillSpeed, ')
+          ..write('decodeSpeed: $decodeSpeed, ')
+          ..write('messageTokensCount: $messageTokensCount, ')
+          ..write('conversationTokensCount: $conversationTokensCount')
           ..write(')'))
         .toString();
   }
@@ -1990,13 +2046,14 @@ typedef $$_MsgTableCreateCompanionBuilder =
       Value<String?> ttsSpeakerName,
       Value<String?> ttsSourceAudioPath,
       Value<String?> ttsInstruction,
-      Value<double?> ttsOverallProgress,
-      Value<String?> ttsPerWavProgress,
-      Value<String?> ttsFilePaths,
       Value<String?> modelName,
       Value<String?> runningMode,
       required String build,
       Value<String?> rawDecodeParams,
+      Value<double?> prefillSpeed,
+      Value<double?> decodeSpeed,
+      Value<int?> messageTokensCount,
+      Value<int?> conversationTokensCount,
     });
 typedef $$_MsgTableUpdateCompanionBuilder =
     _MsgCompanion Function({
@@ -2016,13 +2073,14 @@ typedef $$_MsgTableUpdateCompanionBuilder =
       Value<String?> ttsSpeakerName,
       Value<String?> ttsSourceAudioPath,
       Value<String?> ttsInstruction,
-      Value<double?> ttsOverallProgress,
-      Value<String?> ttsPerWavProgress,
-      Value<String?> ttsFilePaths,
       Value<String?> modelName,
       Value<String?> runningMode,
       Value<String> build,
       Value<String?> rawDecodeParams,
+      Value<double?> prefillSpeed,
+      Value<double?> decodeSpeed,
+      Value<int?> messageTokensCount,
+      Value<int?> conversationTokensCount,
     });
 
 class $$_MsgTableFilterComposer extends Composer<_$AppDatabase, $_MsgTable> {
@@ -2113,21 +2171,6 @@ class $$_MsgTableFilterComposer extends Composer<_$AppDatabase, $_MsgTable> {
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get ttsOverallProgress => $composableBuilder(
-    column: $table.ttsOverallProgress,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get ttsPerWavProgress => $composableBuilder(
-    column: $table.ttsPerWavProgress,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get ttsFilePaths => $composableBuilder(
-    column: $table.ttsFilePaths,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get modelName => $composableBuilder(
     column: $table.modelName,
     builder: (column) => ColumnFilters(column),
@@ -2145,6 +2188,26 @@ class $$_MsgTableFilterComposer extends Composer<_$AppDatabase, $_MsgTable> {
 
   ColumnFilters<String> get rawDecodeParams => $composableBuilder(
     column: $table.rawDecodeParams,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get prefillSpeed => $composableBuilder(
+    column: $table.prefillSpeed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get decodeSpeed => $composableBuilder(
+    column: $table.decodeSpeed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get messageTokensCount => $composableBuilder(
+    column: $table.messageTokensCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get conversationTokensCount => $composableBuilder(
+    column: $table.conversationTokensCount,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2237,21 +2300,6 @@ class $$_MsgTableOrderingComposer extends Composer<_$AppDatabase, $_MsgTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get ttsOverallProgress => $composableBuilder(
-    column: $table.ttsOverallProgress,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get ttsPerWavProgress => $composableBuilder(
-    column: $table.ttsPerWavProgress,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get ttsFilePaths => $composableBuilder(
-    column: $table.ttsFilePaths,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get modelName => $composableBuilder(
     column: $table.modelName,
     builder: (column) => ColumnOrderings(column),
@@ -2269,6 +2317,26 @@ class $$_MsgTableOrderingComposer extends Composer<_$AppDatabase, $_MsgTable> {
 
   ColumnOrderings<String> get rawDecodeParams => $composableBuilder(
     column: $table.rawDecodeParams,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get prefillSpeed => $composableBuilder(
+    column: $table.prefillSpeed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get decodeSpeed => $composableBuilder(
+    column: $table.decodeSpeed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get messageTokensCount => $composableBuilder(
+    column: $table.messageTokensCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get conversationTokensCount => $composableBuilder(
+    column: $table.conversationTokensCount,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -2344,21 +2412,6 @@ class $$_MsgTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<double> get ttsOverallProgress => $composableBuilder(
-    column: $table.ttsOverallProgress,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get ttsPerWavProgress => $composableBuilder(
-    column: $table.ttsPerWavProgress,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get ttsFilePaths => $composableBuilder(
-    column: $table.ttsFilePaths,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<String> get modelName =>
       $composableBuilder(column: $table.modelName, builder: (column) => column);
 
@@ -2372,6 +2425,26 @@ class $$_MsgTableAnnotationComposer
 
   GeneratedColumn<String> get rawDecodeParams => $composableBuilder(
     column: $table.rawDecodeParams,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get prefillSpeed => $composableBuilder(
+    column: $table.prefillSpeed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get decodeSpeed => $composableBuilder(
+    column: $table.decodeSpeed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get messageTokensCount => $composableBuilder(
+    column: $table.messageTokensCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get conversationTokensCount => $composableBuilder(
+    column: $table.conversationTokensCount,
     builder: (column) => column,
   );
 }
@@ -2420,13 +2493,14 @@ class $$_MsgTableTableManager
                 Value<String?> ttsSpeakerName = const Value.absent(),
                 Value<String?> ttsSourceAudioPath = const Value.absent(),
                 Value<String?> ttsInstruction = const Value.absent(),
-                Value<double?> ttsOverallProgress = const Value.absent(),
-                Value<String?> ttsPerWavProgress = const Value.absent(),
-                Value<String?> ttsFilePaths = const Value.absent(),
                 Value<String?> modelName = const Value.absent(),
                 Value<String?> runningMode = const Value.absent(),
                 Value<String> build = const Value.absent(),
                 Value<String?> rawDecodeParams = const Value.absent(),
+                Value<double?> prefillSpeed = const Value.absent(),
+                Value<double?> decodeSpeed = const Value.absent(),
+                Value<int?> messageTokensCount = const Value.absent(),
+                Value<int?> conversationTokensCount = const Value.absent(),
               }) => _MsgCompanion(
                 id: id,
                 content: content,
@@ -2444,13 +2518,14 @@ class $$_MsgTableTableManager
                 ttsSpeakerName: ttsSpeakerName,
                 ttsSourceAudioPath: ttsSourceAudioPath,
                 ttsInstruction: ttsInstruction,
-                ttsOverallProgress: ttsOverallProgress,
-                ttsPerWavProgress: ttsPerWavProgress,
-                ttsFilePaths: ttsFilePaths,
                 modelName: modelName,
                 runningMode: runningMode,
                 build: build,
                 rawDecodeParams: rawDecodeParams,
+                prefillSpeed: prefillSpeed,
+                decodeSpeed: decodeSpeed,
+                messageTokensCount: messageTokensCount,
+                conversationTokensCount: conversationTokensCount,
               ),
           createCompanionCallback:
               ({
@@ -2470,13 +2545,14 @@ class $$_MsgTableTableManager
                 Value<String?> ttsSpeakerName = const Value.absent(),
                 Value<String?> ttsSourceAudioPath = const Value.absent(),
                 Value<String?> ttsInstruction = const Value.absent(),
-                Value<double?> ttsOverallProgress = const Value.absent(),
-                Value<String?> ttsPerWavProgress = const Value.absent(),
-                Value<String?> ttsFilePaths = const Value.absent(),
                 Value<String?> modelName = const Value.absent(),
                 Value<String?> runningMode = const Value.absent(),
                 required String build,
                 Value<String?> rawDecodeParams = const Value.absent(),
+                Value<double?> prefillSpeed = const Value.absent(),
+                Value<double?> decodeSpeed = const Value.absent(),
+                Value<int?> messageTokensCount = const Value.absent(),
+                Value<int?> conversationTokensCount = const Value.absent(),
               }) => _MsgCompanion.insert(
                 id: id,
                 content: content,
@@ -2494,13 +2570,14 @@ class $$_MsgTableTableManager
                 ttsSpeakerName: ttsSpeakerName,
                 ttsSourceAudioPath: ttsSourceAudioPath,
                 ttsInstruction: ttsInstruction,
-                ttsOverallProgress: ttsOverallProgress,
-                ttsPerWavProgress: ttsPerWavProgress,
-                ttsFilePaths: ttsFilePaths,
                 modelName: modelName,
                 runningMode: runningMode,
                 build: build,
                 rawDecodeParams: rawDecodeParams,
+                prefillSpeed: prefillSpeed,
+                decodeSpeed: decodeSpeed,
+                messageTokensCount: messageTokensCount,
+                conversationTokensCount: conversationTokensCount,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

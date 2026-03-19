@@ -1,15 +1,22 @@
+// Dart imports:
 import 'dart:io';
 
+// Flutter imports:
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:path/path.dart' as path;
 import 'package:share_plus/share_plus.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/message.dart' as model;
-import 'package:path/path.dart' as path;
 import 'package:zone/store/p.dart';
 
 class UserTTSContent extends ConsumerWidget {
@@ -67,8 +74,9 @@ class UserTTSContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final s = S.of(context);
-    final primary = Theme.of(context).colorScheme.primary;
+    final primary = theme.colorScheme.primary;
 
     final (String displayFlag, String displayNameCn, String displayNameEn) = P.talk.getSpkInfo(msg.ttsSpeakerName ?? "");
 
@@ -76,14 +84,14 @@ class UserTTSContent extends ConsumerWidget {
     final playing = ref.watch(P.see.playing);
     final isCurrentMessage = latestClickedMessage?.id == msg.id;
 
-    const EdgeInsets buttonPadding = .only(left: 4, top: 8, right: 4, bottom: 4);
+    const buttonPadding = EdgeInsets.only(left: 4, top: 6, right: 4, bottom: 4);
 
     const buttonSize = 24.0;
 
     final qw = ref.watch(P.app.qw);
 
     return Padding(
-      padding: const .only(left: 6, top: 2, right: 6, bottom: 6),
+      padding: const .only(left: 6, top: 0, right: 6, bottom: 4),
       child: Column(
         crossAxisAlignment: .start,
         children: [
@@ -97,8 +105,8 @@ class UserTTSContent extends ConsumerWidget {
                     borderRadius: .circular(8),
                     border: .all(color: primary, width: .5),
                   ),
-                  margin: const .only(top: 4),
-                  padding: const .only(left: 4, top: 4, right: 4, bottom: 4),
+                  margin: const .only(top: 6),
+                  padding: const .only(left: 4, top: 3, right: 4, bottom: 3),
                   child: Text.rich(
                     TextSpan(
                       children: [
@@ -145,7 +153,7 @@ class UserTTSContent extends ConsumerWidget {
                 child: Padding(
                   padding: buttonPadding,
                   child: Icon(
-                    Icons.copy,
+                    Symbols.content_copy,
                     color: primary.q(.8),
                     size: buttonSize,
                   ),
@@ -164,7 +172,7 @@ class UserTTSContent extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             msg.ttsTarget ?? "null",
             style: const TS(s: 16),

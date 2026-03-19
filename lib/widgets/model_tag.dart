@@ -1,9 +1,11 @@
-// ignore: unused_import
-import 'dart:developer';
-
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
 import 'package:zone/store/p.dart';
 
 class _RenderingOptions {
@@ -16,7 +18,7 @@ class _RenderingOptions {
 
   _RenderingOptions({
     this.footer,
-    this.fontWeight = .w500,
+    this.fontWeight = .w400,
     required this.bgColor,
     required this.textColor,
     required this.borderColor,
@@ -25,6 +27,9 @@ class _RenderingOptions {
 }
 
 class ModelTag extends ConsumerWidget {
+  static final Color _tagSoftGreenIconColor = const Color(0xFF_FF_B5_2F);
+  static final Color _tagSoftGreenIconColorDark = const Color(0xFFFFD54F);
+
   final String tag;
   final bool forceUppercase;
   final Color? forceBgColor;
@@ -32,106 +37,99 @@ class ModelTag extends ConsumerWidget {
 
   const ModelTag({super.key, required this.tag, this.forceUppercase = false, this.forceBgColor, this.forceTextColor});
 
-  _RenderingOptions _getRenderingOptions(String tagName, WidgetRef ref, BuildContext context) {
+  _RenderingOptions _getRenderingOptions(String tagName, WidgetRef ref, Color primary, Brightness brightness) {
     final qb = ref.watch(P.app.qb);
-    final qw = ref.watch(P.app.qw);
+
+    final isDark = brightness == Brightness.dark;
+
+    final tagBoltColor = isDark ? _tagSoftGreenIconColorDark : _tagSoftGreenIconColor;
+
     final logicTagName = tagName.toLowerCase();
-    final primary = Theme.of(context).colorScheme.primary;
     switch (logicTagName) {
       case "mlx":
         return _RenderingOptions(
-          footer: Padding(
-            padding: const .only(bottom: 2),
-            child: Icon(Icons.apple, size: 13, color: qb),
+          footer: Icon(
+            Icons.apple,
+            size: 14,
+            color: qb,
           ),
-          bgColor: Colors.transparent,
+          bgColor: qb.q(.1),
           textColor: qb,
-          borderColor: qb,
+          borderColor: qb.q(.1),
           displayTagName: "GPU",
+          fontWeight: .w400,
         );
       case "coreml":
-        return _RenderingOptions(
-          footer: Padding(
-            padding: const .only(bottom: 2),
-            child: Icon(Icons.apple, size: 13, color: qb),
-          ),
-          bgColor: Colors.transparent,
-          textColor: qb,
-          borderColor: qb,
-          displayTagName: "NPU",
-        );
       case "npu":
         return _RenderingOptions(
-          footer: const Text("⚡"),
-          bgColor: kCG,
-          textColor: qw,
-          borderColor: kCG,
+          footer: Icon(
+            Icons.bolt,
+            size: 14,
+            color: tagBoltColor,
+          ),
+          bgColor: qb.q(.1),
+          textColor: qb,
+          borderColor: qb.q(.1),
           displayTagName: "NPU",
         );
-      case "gpu":
+      case "deepembedding":
         return _RenderingOptions(
-          bgColor: kCG,
-          textColor: qw,
-          borderColor: kCG,
-          displayTagName: "GPU",
-        );
-      case "DeepEmbedding":
-        return _RenderingOptions(
-          bgColor: kCG,
-          textColor: qw,
-          borderColor: kCG,
-          displayTagName: "DE",
+          bgColor: qb.q(.1),
+          textColor: qb,
+          borderColor: qb.q(.1),
+          displayTagName: "DeepEmb",
         );
       case "batch":
         return _RenderingOptions(
-          bgColor: kCG,
-          textColor: qw,
-          borderColor: kCG,
+          bgColor: qb.q(.1),
+          textColor: qb,
+          borderColor: qb.q(.1),
           displayTagName: "BATCH",
         );
       case "webrwkv":
         return _RenderingOptions(
-          bgColor: kCG,
-          textColor: qw,
-          borderColor: kCG,
+          bgColor: qb.q(.1),
+          textColor: qb,
+          borderColor: qb.q(.1),
           displayTagName: "WebRWKV",
         );
       case "cpu":
         return _RenderingOptions(
-          bgColor: kG.q(.2),
+          bgColor: qb.q(.1),
           textColor: qb,
-          borderColor: kG.q(.2),
+          borderColor: qb.q(.1),
           displayTagName: "CPU",
           fontWeight: .w400,
         );
       case "translate":
         return _RenderingOptions(
-          bgColor: kG.q(.2),
+          bgColor: qb.q(.1),
           textColor: qb,
-          borderColor: kG.q(.2),
+          borderColor: qb.q(.1),
           displayTagName: "Translation",
         );
       case "tts":
         return _RenderingOptions(
-          bgColor: primary.q(.2),
-          textColor: primary.q(1),
-          borderColor: primary.q(1),
+          bgColor: qb.q(.1),
+          textColor: qb,
+          borderColor: qb.q(.1),
           displayTagName: tagName.toUpperCase(),
           fontWeight: .w400,
         );
       case "vision":
         return _RenderingOptions(
-          bgColor: primary.q(.2),
-          textColor: primary.q(1),
-          borderColor: primary.q(1),
+          bgColor: qb.q(.1),
+          textColor: qb,
+          borderColor: qb.q(.1),
           displayTagName: tagName.toUpperCase(),
           fontWeight: .w400,
         );
+      case "gpu":
       default:
         return _RenderingOptions(
-          bgColor: kG.q(.2),
+          bgColor: qb.q(.1),
           textColor: qb,
-          borderColor: kG.q(.2),
+          borderColor: qb.q(.1),
           displayTagName: tagName,
           fontWeight: .w400,
         );
@@ -140,7 +138,8 @@ class ModelTag extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final opt = _getRenderingOptions(tag, ref, context);
+    final theme = Theme.of(context);
+    final opt = _getRenderingOptions(tag, ref, theme.colorScheme.primary, theme.brightness);
 
     return Container(
       decoration: BoxDecoration(
@@ -148,15 +147,24 @@ class ModelTag extends ConsumerWidget {
         border: .all(color: opt.borderColor, width: .5),
         borderRadius: .circular(4),
       ),
-      padding: const .symmetric(horizontal: 4),
+      padding: const .only(
+        left: 4,
+        right: 4,
+      ),
       child: IntrinsicWidth(
         child: Row(
+          mainAxisAlignment: .center,
           children: [
-            Text(
-              forceUppercase ? opt.displayTagName.toUpperCase() : opt.displayTagName,
-              style: TS(
-                c: forceTextColor ?? opt.textColor,
-                w: opt.fontWeight,
+            if (opt.footer != null) 2.w,
+            Container(
+              padding: const .symmetric(vertical: 1),
+              child: Text(
+                forceUppercase ? opt.displayTagName.toUpperCase() : opt.displayTagName,
+                style: TS(
+                  c: forceTextColor ?? opt.textColor,
+                  w: opt.fontWeight,
+                  height: 1.2,
+                ),
               ),
             ),
             ?opt.footer,

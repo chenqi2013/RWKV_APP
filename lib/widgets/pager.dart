@@ -1,12 +1,16 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:io';
 import 'dart:math';
 
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
+
+// Project imports:
 import 'package:zone/func/extensions/num.dart';
 import 'package:zone/store/p.dart';
 
@@ -218,8 +222,8 @@ class _CustomPageScrollPhysics extends PageScrollPhysics {
 
   // 获取目标页面索引
   int getTargetPage(ScrollMetrics position, double velocity) {
-    final double pageSize = position.viewportDimension;
-    final double currentPage = position.pixels / pageSize;
+    final pageSize = position.viewportDimension;
+    final currentPage = position.pixels / pageSize;
 
     // 根据速度和当前位置计算目标页面
     if (velocity.abs() >= minFlingVelocity) {

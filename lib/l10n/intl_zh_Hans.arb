@@ -15,12 +15,22 @@
   "visual_understanding_and_ocr": "视觉理解与 OCR",
   "please_select_an_image_first": "请先选择一个图片",
   "change_selected_image": "更换图片",
-  "show_escape_characters": "换行符显示",
+  "render_newline_directly": "直接渲染换行",
   "line_break_rendered": "已渲染换行",
   "escape_characters_rendered": "已渲染换行符",
+  "render_space_symbol": "渲染空格符号",
+  "space_rendered": "已渲染空格",
+  "space_symbols_rendered": "已渲染空格符号",
+  "space_symbol_settings": "空格符设置",
+  "line_break_symbol_settings": "换行符设置",
+  "space_symbol_style": "空格符样式",
+  "text_color": "文本颜色",
+  "background_color": "背景颜色",
+  "preview": "预览",
   "show_prefill_log_only": "仅显示 Prefill 日志",
   "text": "文本",
   "life_span": "Life Span",
+  "less_than_01_gb": "小于 0.01 GB",
   "state_panel": "状态面板",
   "open_state_panel": "打开状态面板",
   "refreshed": "已刷新",
@@ -36,6 +46,7 @@
   "thinking_mode_alert_footer": "模式",
   "think_mode_selector_title": "请选择推理模式",
   "think_mode_selector_message": "推理模式会影响模型在推理时的表现",
+  "think_mode_selector_recommendation": "推荐至少选择【推理-快】",
   "think_button_mode_fast": "推理{footer}-快",
   "think_button_mode_en": "推理{footer}-英",
   "think_button_mode_en_short": "推理{footer}-英短",
@@ -44,12 +55,33 @@
   "model_size_increased_please_open_a_new_conversation": "模型大小增加，请打开一个新的对话, 以提升对话质量",
   "batch_inference_short": "并行",
   "your_voice_is_empty": "您的声音数据为空，请检查您的麦克风",
+  "tts_voice_source_sheet_title": "选择 RWKV 要模仿的声音",
+  "tts_voice_source_sheet_subtitle": "在下列的不同方式中选择录入声音的方式",
+  "tts_voice_source_preset_title": "预设声音",
+  "tts_voice_source_preset_subtitle": "在 RWKV 内置的预设声音中选择",
+  "tts_voice_source_my_voice_title": "我的声音",
+  "tts_voice_source_my_voice_subtitle": "录制我的声音，让 RWKV 模仿它",
+  "tts_voice_source_file_title": "声音文件",
+  "tts_voice_source_file_subtitle": "选择一个 WAV 文件让 RWKV 模仿它",
+  "tts_voice_source_file_panel_hint": "使用下方文件的声音来生成语音",
   "batch_inference_running": "并行推理中，同时生成 {count} 条消息",
   "batch_inference_selected": "已选择第 {index} 条消息",
   "this_model_does_not_support_batch_inference": "这个模型不支持并行推理, 请选择带有 batch 标签的模型",
   "enabled": "开启",
   "disabled": "关闭",
   "please_select_a_branch_to_continue_the_conversation": "请选择你喜欢的分支以进行接下来的对话",
+  "branch_switcher_tooltip_first": "已经是第一条消息了",
+  "branch_switcher_tooltip_prev": "上一条消息",
+  "branch_switcher_tooltip_last": "已经是最后一条消息了",
+  "branch_switcher_tooltip_next": "下一条消息",
+  "user_message_branch_switched": "已切换分支",
+  "user_message_actions_panel_title": "消息操作",
+  "user_message_actions_panel_empty": "当前消息暂无可用操作",
+  "user_message_actions_panel_switch_branch_title": "切换分支",
+  "user_message_actions_panel_switch_branch_subtitle": "通过上一条 / 下一条切换相邻分支",
+  "delete_current_branch": "删除当前消息",
+  "delete_branch_title": "删除当前消息",
+  "delete_branch_confirmation_message": "这是危险操作：将永久删除当前消息及其所有子节点，并同步删除数据库中的相关记录。该操作不可恢复，是否继续？",
   "screen_width": "屏幕宽度",
   "batch_inference_button": "并行 × {count}",
   "batch_inference": "并行推理",
@@ -128,6 +160,7 @@
   "select_a_world_type": "选择任务类型",
   "please_select_a_world_type": "请选择任务类型",
   "loading": "加载中...",
+  "loading_progress_percent": "加载{percent}%",
   "cancel": "取消",
   "session_configuration": "会话配置",
   "apply": "应用",
@@ -175,6 +208,9 @@
   "please_select_application_language": "请选择应用语言",
   "please_select_font_size": "请选择字体大小",
   "font_size": "字体大小",
+  "message_line_height": "消息行距",
+  "use_default_line_height": "使用默认行距",
+  "message_line_height_default_hint": "默认会使用字体和渲染器本身的行高，不是固定 1.0x。这里的自定义范围是 1.0x 到 2.0x。",
   "font_setting": "字体设置",
   "ui_font_setting": "UI 字体设置",
   "monospace_font_setting": "等宽字体设置",
@@ -210,8 +246,15 @@
   "in_context_search_will_be_activated_when_both_breadth_and_depth_are_greater_than_2": "当搜索深度和宽度都大于 2 时，将激活上下文搜索",
   "new_game": "新游戏",
   "rwkv": "RWKV",
-  "prefill": "预填",
+  "prefill": "预填充",
+  "prefill_progress_percent": "预填充进度 {percent}",
   "decode": "解码",
+  "message_token_count": "单条消息 Token 数量",
+  "conversation_token_count": "当前对话 Token 数量",
+  "conversation_token_limit_hint_short": "建议开启新对话",
+  "conversation_token_limit_recommend_new_chat": "当前对话已超过 8,000 tokens，建议开启新对话",
+  "prefill_speed_tokens_per_second": "预填充速度（tokens 每秒）",
+  "decode_speed_tokens_per_second": "解码速度（tokens 每秒）",
   "current_turn": "当前回合",
   "start_a_new_game": "开始对局",
   "please_wait_for_the_model_to_generate": "请等待模型生成",
@@ -329,11 +372,6 @@
   "prompt": "提示词",
   "output": "输出",
   "model_output": "模型输出: {text}",
-  "@model_output": {
-    "placeholders": {
-      "text": {}
-    }
-  },
   "submit": "提交",
   "regenerate": "重新生成",
   "resume": "恢复",
@@ -407,6 +445,8 @@
   "model": "模型",
   "no_model_selected": "未选择模型",
   "change": "更改",
+  "edit": "编辑",
+  "editing": "编辑中",
   "status": "状态",
   "translating": "翻译中...",
   "idle": "空闲",
@@ -416,38 +456,13 @@
   "start_service": "启动服务",
   "lan_server": "局域网服务器",
   "http_service_port": "HTTP 服务 (端口: {port})",
-  "@http_service_port": {
-    "placeholders": {
-      "port": {}
-    }
-  },
   "websocket_service_port": "WebSocket 服务 (端口: {port})",
-  "@websocket_service_port": {
-    "placeholders": {
-      "port": {}
-    }
-  },
   "browser_status": "浏览器状态",
   "no_browser_windows_connected": "没有连接的浏览器窗口",
   "start_service_and_open_browser": "启动服务并打开支持的浏览器页面。",
   "window_id": "窗口 {id}",
-  "@window_id": {
-    "placeholders": {
-      "id": {}
-    }
-  },
   "x_tabs": "{count} 个标签页",
-  "@x_tabs": {
-    "placeholders": {
-      "count": {}
-    }
-  },
   "queued_x": "排队中: {count}",
-  "@queued_x": {
-    "placeholders": {
-      "count": {}
-    }
-  },
   "translator_debug_info": "翻译器调试信息",
   "cached_translations_memory": "缓存的翻译 (内存)",
   "cached_translations_disk": "缓存的翻译 (磁盘)",
@@ -534,7 +549,7 @@
   "presence_penalty_with_value": "Presence Penalty: {value}",
   "frequency_penalty_with_value": "Frequency Penalty: {value}",
   "penalty_decay_with_value": "Penalty Decay: {value}",
-  "font_preview_user_message": "Hello! 你好！这是用户消息的预览。",
+  "font_preview_user_message": "Hello! 你好！这是用户消息的预览。\n第二行会跟着你调节的行距一起变化。",
   "font_preview_markdown_asset": "assets/lib/font_preview/font_preview_zh_Hans.md",
   "tag_date": "日期",
   "tag_time": "时间",
@@ -547,24 +562,17 @@
   "camera": "相机",
   "gallery": "相册",
   "ocr_guide_text": "点击 {takePhoto}。RWKV 将翻译图片中的文本。",
-  "@ocr_guide_text": {
-    "placeholders": {
-      "takePhoto": {}
-    }
-  },
   "enter_text_to_expand": "输入要续写的段落",
   "continue2": "续写",
   "please_entry_some_text_to_continue": "请先输入要续写的段落",
   "reached_bottom": "敬请期待",
   "open_database_folder": "打开数据库文件夹",
   "npu_not_supported_title": "暂未支持您的芯片 {socName} 的 NPU 加速",
-  "@npu_not_supported_title": {
-    "placeholders": {
-      "socName": {}
-    }
-  },
   "adapting_more_inference_chips": "我们正在持续适配更多的推理芯片，敬请期待。",
   "other_files": "其他文件 (这些文件可能是已经过期或不再支持的权重 RWKV Chat 无需再使用它们)",
+  "mlx_cache": "MLX/CoreML 缓存",
+  "mlx_cache_notice": "删除 MLX/CoreML 缓存可释放磁盘空间，但下次加载对应的 MLX/CoreML 模型会更慢。",
+  "delete_mlx_cache_confirmation": "确定要删除这个 MLX/CoreML 缓存吗？",
   "import_weight_file": "导入权重文件",
   "import_success": "导入成功",
   "import_failed": "导入失败",
@@ -587,23 +595,11 @@
   "import_all_weight_files": "导入全部权重文件",
   "import_all_weight_files_description": "选择从此应用导出的 ZIP 文件。ZIP 文件中的所有权重文件将被导入。如果文件名相同，现有文件将被覆盖。",
   "import_all_weight_files_success": "导入成功：已导入 {count} 个文件",
-  "@import_all_weight_files_success": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "invalid_zip_file": "无效的 ZIP 文件或文件格式无法识别",
   "no_files_in_zip": "ZIP 文件中未找到有效的权重文件",
   "current_model_from_latest_json_not_pth": "当前加载的是 latest.json 中的配置，不是本地 .pth 文件",
   "no_local_pth_loaded_yet": "暂无已加载的本地 .pth 文件",
   "ctx_length_label": "ctx {length}",
-  "@ctx_length_label": {
-    "placeholders": {
-      "length": {}
-    }
-  },
   "local_pth_option_files_in_config": "配置文件中的权重",
   "local_pth_option_local_pth_files": "本地 .pth 文件",
   "select_weights_or_local_pth_hint": "选择配置文件中的权重或者本地 .pth 文件",
@@ -635,17 +631,7 @@
   "folder_not_found_on_device": "未在您的电脑上发现该文件夹",
   "folder_not_accessible_check_permission": "该文件夹无法访问，请检查文件夹权限",
   "path_label": "路径：{path}",
-  "@path_label": {
-    "placeholders": {
-      "path": {}
-    }
-  },
   "local_folder_name": "本地文件夹：{folderName}",
-  "@local_folder_name": {
-    "placeholders": {
-      "folderName": {}
-    }
-  },
   "custom_directory_set": "自定义目录已设置",
   "reset_to_default_directory": "已恢复默认目录",
   "failed_to_create_directory": "创建目录失败",
@@ -656,33 +642,44 @@
   "moving_files": "正在移动文件...",
   "already_using_this_directory": "已在使用此目录",
   "files_moved_with_failures": "{successCount} 个文件已移动，{failCount} 个失败",
-  "@files_moved_with_failures": {
-    "placeholders": {
-      "successCount": {},
-      "failCount": {}
-    }
-  },
   "please_manually_migrate_files": "路径已更新，如需迁移文件请手动选择并移动。",
   "open_folder_unsupported_on_platform": "当前操作系统({os})不支持打开文件夹的操作。",
-  "@open_folder_unsupported_on_platform": {
-    "placeholders": {
-      "os": {}
-      }
-    },
-    "delete_finished": "删除完成",
-    "failed_to_delete_file": "删除文件失败：{error}",
-    "@failed_to_delete_file": {
-      "placeholders": {
-        "error": {}
-      }
-    },
-    "open_folder_path_is_null": "文件夹路径为空。",
-    "open_folder_creating_empty": "文件夹不存在，正在创建空文件夹。",
-    "open_folder_created_success": "空文件夹创建成功。",
-    "open_folder_create_failed": "空文件夹创建失败：{error}",
-    "@open_folder_create_failed": {
-      "placeholders": {
-        "error": {}
-      }
-    }
+  "delete_finished": "删除完成",
+  "failed_to_delete_file": "删除文件失败：{error}",
+  "open_folder_path_is_null": "文件夹路径为空。",
+  "open_folder_creating_empty": "文件夹不存在，正在创建空文件夹。",
+  "open_folder_created_success": "空文件夹创建成功。",
+  "open_folder_create_failed": "空文件夹创建失败：{error}",
+  "model_item_ios18_weight_hint": "升级 iOS 18+ 可使用这款权重，更快更省电",
+  "tts_is_running_please_wait": "TTS 正在运行，请等待其完成",
+  "please_select_a_spk_or_a_wav_file": "请选择一个预设声音或录制您的声音",
+  "please_enter_text_to_generate_tts": "请输入文本以生成语音",
+  "windows_architecture_mismatch_warning": "检测到架构不匹配：当前应用 Build Architecture 为 {buildArchitecture}，但 Windows Operating System 为 {operatingSystemArchitecture}。请前往官方下载页下载匹配版本：{url}",
+  "windows_architecture_mismatch_dialog_title": "架构不匹配",
+  "windows_architecture_mismatch_dialog_message": "当前应用 Build Architecture 为 {buildArchitecture}，但 Windows Operating System 为 {operatingSystemArchitecture}。\n\n请前往官方下载页下载匹配架构的可执行文件：\n{url}",
+  "open_official_download_page": "打开官方下载页",
+  "mimic": "模仿",
+  "ask": "提问",
+  "question_generator": "RWKV 帮你问",
+  "question_generator_mock_description": "不知道怎么开口更合适？让 RWKV 先帮你想一个吧。",
+  "question_generator_mock_batch_description": "一时想不到怎么问？让 RWKV 多帮你想几个问题吧。",
+  "question_generator_empty_chat_hint": "选好上面的问题开头后，点一下生成，RWKV 会先帮你想一个可以直接提问的问题。",
+  "question_generator_empty_chat_batch_hint": "选好上面的问题开头后，点一下生成，RWKV 会先帮你想几个可以直接提问的问题。",
+  "question_generator_tap_generate_hint": "点一下生成，RWKV 会顺着你选好的开头，帮你想出最多 {count} 个问题。",
+  "question_generator_language_switched_hint": "切换语言后，上面可选的问题开头也会一起变化。挑一个顺手的开头，再让 RWKV 接着往下想就好。",
+  "question_generator_prefix_guide": "点一点不同的问题开头，RWKV 会顺着这个开头继续帮你生成问题。你也可以直接改下面的输入框，写一个更符合你想法的开头。",
+  "question_generator_prefixes": "问题前缀",
+  "question_generator_count": "生成数量",
+  "question_generator_prefix_input_placeholder": "在这里写下你想要的问题开头...",
+  "question_generator_context_prefix_input_placeholder": "如果留空，RWKV 会根据上下文生成问题",
+  "question_generator_prefix_required": "请先输入一个问题前缀",
+  "question_generator_question_action_guide": "点击已生成的问题，即可粘贴到对话输入框。",
+  "question_language": "我想让 RWKV 以这种语言提问...",
+  "prefix_bank": "前缀组",
+  "prefix_examples": "前缀示例",
+  "generated_questions": "生成的问题",
+  "english": "English",
+  "japanese": "日本語",
+  "korean": "한국어",
+  "russian": "Русский"
 }

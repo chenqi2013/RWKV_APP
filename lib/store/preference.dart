@@ -1,11 +1,19 @@
 part of 'p.dart';
 
+const String _debugRenderNewlineDirectlyPreferenceKey = "halo_state.debug.renderNewlineDirectly";
+const String _legacyDebugRenderNewlineDirectlyPreferenceKey = "halo_state.debug.renderEscapeDirectly";
+const String _debugRenderSpaceSymbolPreferenceKey = "halo_state.debug.renderSpaceSymbol";
+const String _legacyDebugRenderSpaceSymbolPreferenceKey = "halo_state.debug.showSpaceSymbols";
+const String _debugShowPrefillLogOnlyPreferenceKey = "halo_state.debug.showPrefillLogOnly";
+const String _messageLineHeightPreferenceKey = "halo_state.messageLineHeight";
+
 class _Preference {
   // ===========================================================================
   // Static
   // ===========================================================================
 
   final textScaleFactorSystem = -1.0;
+  final messageLineHeightDefault = 0.0;
 
   // ===========================================================================
   // Instance
@@ -59,11 +67,14 @@ class _Preference {
   /// 非空表示使用指定的 textScaleFactor
   late final preferredTextScaleFactor = qs<double>(-1.0);
 
+  /// 偏好的消息气泡行距；0 表示使用默认行高
+  late final preferredMessageLineHeight = qs<double>(0.0);
+
   /// 偏好的主题模式设置，跟随系统、深色模式、浅色模式
   late final themeMode = qs<ThemeMode>(ThemeMode.system);
 
   /// 偏好的深色模式主题
-  late final preferredDarkCustomTheme = qs<custom_theme.CustomTheme>(.lightsOut);
+  late final preferredDarkCustomTheme = qs<app_theme.AppTheme>(.lightsOut);
 
   late final lastWorldModel = qs<Map<String, dynamic>?>(null);
 
@@ -109,6 +120,14 @@ class _Preference {
     final preferredLanguage = ref.watch(P.preference.preferredLanguage);
     return preferredLanguage.resolved.locale.languageCode == "zh";
   });
+
+  late final effectiveMessageLineHeight = qp<double?>((ref) {
+    final preferredMessageLineHeight = ref.watch(P.preference.preferredMessageLineHeight);
+    if (preferredMessageLineHeight <= 0) {
+      return null;
+    }
+    return preferredMessageLineHeight;
+  });
 }
 
 /// Private methods
@@ -139,6 +158,13 @@ extension _$Preference on _Preference {
       preferredTextScaleFactor.q = textScaleFactor;
     } else {
       preferredTextScaleFactor.q = -1;
+    }
+
+    final messageLineHeight = sp.getDouble(_messageLineHeightPreferenceKey);
+    if (messageLineHeight != null && messageLineHeight > 0) {
+      preferredMessageLineHeight.q = messageLineHeight;
+    } else {
+      preferredMessageLineHeight.q = messageLineHeightDefault;
     }
 
     final userType = sp.getInt("halo_state.user_type");
@@ -259,6 +285,43 @@ extension _$Preference on _Preference {
         await sp.setString("halo_state.pthFolderEntries", jsonEncode(pthFolderEntries.q.map((e) => e.toJson()).toList()));
       }
     }
+
+    final debugRenderNewlineDirectly = sp.getBool(_debugRenderNewlineDirectlyPreferenceKey);
+    if (debugRenderNewlineDirectly != null) {
+      P.rwkv.renderNewlineDirectly.q = debugRenderNewlineDirectly;
+      await sp.remove(_legacyDebugRenderNewlineDirectlyPreferenceKey);
+    } else {
+      final legacyDebugRenderNewlineDirectly = sp.getBool(_legacyDebugRenderNewlineDirectlyPreferenceKey);
+      if (legacyDebugRenderNewlineDirectly != null) {
+        P.rwkv.renderNewlineDirectly.q = legacyDebugRenderNewlineDirectly;
+        await sp.setBool(_debugRenderNewlineDirectlyPreferenceKey, legacyDebugRenderNewlineDirectly);
+        await sp.remove(_legacyDebugRenderNewlineDirectlyPreferenceKey);
+      }
+    }
+
+    final debugRenderSpaceSymbol = sp.getBool(_debugRenderSpaceSymbolPreferenceKey);
+    if (debugRenderSpaceSymbol != null) {
+      P.rwkv.renderSpaceSymbol.q = debugRenderSpaceSymbol;
+      await sp.remove(_legacyDebugRenderSpaceSymbolPreferenceKey);
+    } else {
+      final legacyDebugRenderSpaceSymbol = sp.getBool(_legacyDebugRenderSpaceSymbolPreferenceKey);
+      if (legacyDebugRenderSpaceSymbol != null) {
+        P.rwkv.renderSpaceSymbol.q = legacyDebugRenderSpaceSymbol;
+        await sp.setBool(_debugRenderSpaceSymbolPreferenceKey, legacyDebugRenderSpaceSymbol);
+        await sp.remove(_legacyDebugRenderSpaceSymbolPreferenceKey);
+      }
+    }
+
+    final debugShowPrefillLogOnly = sp.getBool(_debugShowPrefillLogOnlyPreferenceKey);
+    if (debugShowPrefillLogOnly != null) {
+      P.rwkv.showPrefillLogOnly.q = debugShowPrefillLogOnly;
+    }
+
+    await sp.remove("halo_state.debug.visibleSpaceSymbol");
+    await sp.remove("halo_state.debug.spaceSymbolBackgroundColor");
+    await sp.remove("halo_state.debug.spaceSymbolTextColor");
+    await sp.remove("halo_state.debug.newlineSymbolBackgroundColor");
+    await sp.remove("halo_state.debug.newlineSymbolTextColor");
 
     // TODO: remove getter after refactor P.init logic is done @wangce
     final packageInfo = await PackageInfo.fromPlatform();
@@ -436,6 +499,17 @@ extension $Preference on _Preference {
     }
   }
 
+  Future<void> setPreferredMessageLineHeight(double lineHeight) async {
+    final normalizedLineHeight = lineHeight <= 0 ? messageLineHeightDefault : lineHeight;
+    preferredMessageLineHeight.q = normalizedLineHeight;
+    final sp = await SharedPreferences.getInstance();
+    if (normalizedLineHeight <= 0) {
+      await sp.remove(_messageLineHeightPreferenceKey);
+      return;
+    }
+    await sp.setDouble(_messageLineHeightPreferenceKey, normalizedLineHeight);
+  }
+
   Future<void> setPreferredMonospaceFont(String? fontFamily) async {
     preferredMonospaceFont.q = fontFamily;
     final sp = await SharedPreferences.getInstance();
@@ -492,5 +566,20 @@ extension $Preference on _Preference {
     hasUnlinkDefaultModelsDirOnce = value;
     final sp = await SharedPreferences.getInstance();
     await sp.setBool("halo_state.hasUnlinkDefaultModelsDirOnce.$version.$buildNumber", value);
+  }
+
+  Future<void> saveDebugRenderNewlineDirectly(bool value) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_debugRenderNewlineDirectlyPreferenceKey, value);
+  }
+
+  Future<void> saveDebugRenderSpaceSymbol(bool value) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_debugRenderSpaceSymbolPreferenceKey, value);
+  }
+
+  Future<void> saveDebugShowPrefillLogOnly(bool value) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_debugShowPrefillLogOnlyPreferenceKey, value);
   }
 }

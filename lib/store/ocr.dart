@@ -83,7 +83,7 @@ extension _$Ocr on _Ocr {
   }
 
   Future<void> _processImage(InputImage inputImage) async {
-    final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+    final recognizedText = await textRecognizer.processImage(inputImage);
 
     final Set<BBox> newWords = {};
     final Set<BBox> newLines = {};
@@ -179,7 +179,7 @@ extension _$Ocr on _Ocr {
       updatedTranslations[i] = responseBufferContents[i];
     }
 
-    final Map<String, String> newTranslations = {};
+    final newTranslations = <String, String>{};
     for (var i = 0; i < batchLines.length; i++) {
       final line = batchLines[i];
       final translation = updatedTranslations[i];
@@ -255,6 +255,7 @@ extension _$Ocr on _Ocr {
         batchMessages,
         enableReasoning: reasoning,
         forceReasoning: thinkingMode.forceReasoning,
+        addGenerationPrompt: true,
         batchSize: batchSize,
         modelID: modelID,
       ),
@@ -286,7 +287,7 @@ extension _$Ocr on _Ocr {
       this.runningTasks.q = [];
     }
 
-    final List<String> newTasks = [];
+    final newTasks = <String>[];
     for (var i = 0; i < onScreenTexts.length; i++) {
       final text = onScreenTexts[i];
       final hasDone = batchTranslations.containsKey(text);

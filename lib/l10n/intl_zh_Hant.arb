@@ -15,12 +15,22 @@
   "visual_understanding_and_ocr": "視覺理解與 OCR",
   "please_select_an_image_first": "請先選擇一個圖片",
   "change_selected_image": "更換圖片",
-  "show_escape_characters": "換行符顯示",
+  "render_newline_directly": "直接渲染換行",
   "line_break_rendered": "已渲染換行",
   "escape_characters_rendered": "已渲染換行符",
+  "render_space_symbol": "渲染空格符號",
+  "space_rendered": "已渲染空格",
+  "space_symbols_rendered": "已渲染空格符號",
+  "space_symbol_settings": "空格符設置",
+  "line_break_symbol_settings": "換行符設置",
+  "space_symbol_style": "空格符樣式",
+  "text_color": "文字顏色",
+  "background_color": "背景顏色",
+  "preview": "預覽",
   "show_prefill_log_only": "僅顯示 Prefill 日誌",
   "text": "文字",
   "life_span": "Life Span",
+  "less_than_01_gb": "小於 0.01 GB",
   "state_panel": "狀態面板",
   "open_state_panel": "打開狀態面板",
   "refreshed": "已刷新",
@@ -36,6 +46,7 @@
   "thinking_mode_alert_footer": "模式",
   "think_mode_selector_title": "請選擇推理模式",
   "think_mode_selector_message": "推理模式會影響模型在推理時的表現",
+  "think_mode_selector_recommendation": "建議至少選擇【推理-快】",
   "think_button_mode_fast": "推理{footer}-快",
   "think_button_mode_en": "推理{footer}-英",
   "think_button_mode_en_short": "推理{footer}-英短",
@@ -44,12 +55,33 @@
   "model_size_increased_please_open_a_new_conversation": "模型大小增加，請開啟一個新的對話，以提升對話品質",
   "batch_inference_short": "並行",
   "your_voice_is_empty": "您的聲音資料為空，請檢查您的麥克風",
+  "tts_voice_source_sheet_title": "選擇 RWKV 要模仿的聲音",
+  "tts_voice_source_sheet_subtitle": "在下列的不同方式中選擇錄入聲音的方式",
+  "tts_voice_source_preset_title": "預設聲音",
+  "tts_voice_source_preset_subtitle": "在 RWKV 內建的預設聲音中選擇",
+  "tts_voice_source_my_voice_title": "我的聲音",
+  "tts_voice_source_my_voice_subtitle": "錄製我的聲音，讓 RWKV 模仿它",
+  "tts_voice_source_file_title": "聲音檔案",
+  "tts_voice_source_file_subtitle": "選擇一個 WAV 檔案讓 RWKV 模仿它",
+  "tts_voice_source_file_panel_hint": "使用下方檔案的聲音來生成語音",
   "batch_inference_running": "並行推理中，同時生成 {count} 則訊息",
   "batch_inference_selected": "已選擇第 {index} 則訊息",
   "this_model_does_not_support_batch_inference": "此模型不支援並行推理，請選擇帶有 batch 標籤的模型",
   "enabled": "開啟",
   "disabled": "關閉",
   "please_select_a_branch_to_continue_the_conversation": "請選擇您喜歡的分支以進行接下來的對話",
+  "branch_switcher_tooltip_first": "已經是第一則訊息了",
+  "branch_switcher_tooltip_prev": "上一則訊息",
+  "branch_switcher_tooltip_last": "已經是最後一則訊息了",
+  "branch_switcher_tooltip_next": "下一則訊息",
+  "user_message_branch_switched": "已切換分支",
+  "user_message_actions_panel_title": "訊息操作",
+  "user_message_actions_panel_empty": "目前此訊息沒有可用操作",
+  "user_message_actions_panel_switch_branch_title": "切換分支",
+  "user_message_actions_panel_switch_branch_subtitle": "透過上一則 / 下一則切換相鄰分支",
+  "delete_current_branch": "刪除目前訊息",
+  "delete_branch_title": "刪除目前訊息",
+  "delete_branch_confirmation_message": "這是危險操作：將永久刪除目前訊息及其所有子節點，並同步刪除資料庫中的相關紀錄。此操作無法復原，是否繼續？",
   "screen_width": "螢幕寬度",
   "batch_inference_button": "並行 × {count}",
   "batch_inference": "並行推理",
@@ -128,6 +160,7 @@
   "select_a_world_type": "選擇任務類型",
   "please_select_a_world_type": "請選擇任務類型",
   "loading": "載入中...",
+  "loading_progress_percent": "載入{percent}%",
   "cancel": "取消",
   "session_configuration": "會話組態",
   "apply": "套用",
@@ -175,6 +208,9 @@
   "please_select_application_language": "請選擇應用程式語言",
   "please_select_font_size": "請選擇字體大小",
   "font_size": "字體大小",
+  "message_line_height": "訊息行距",
+  "use_default_line_height": "使用預設行距",
+  "message_line_height_default_hint": "預設會使用字體與渲染器本身的行高，不是固定 1.0x。這裡的自訂範圍是 1.0x 到 2.0x。",
   "font_setting": "字體設定",
   "ui_font_setting": "UI 字體設定",
   "monospace_font_setting": "等寬字體設定",
@@ -210,8 +246,15 @@
   "in_context_search_will_be_activated_when_both_breadth_and_depth_are_greater_than_2": "當搜尋深度和寬度都大於 2 時，將啟用上下文搜尋",
   "new_game": "新遊戲",
   "rwkv": "RWKV",
-  "prefill": "預填",
+  "prefill": "預填充",
+  "prefill_progress_percent": "預填充進度 {percent}",
   "decode": "解碼",
+  "message_token_count": "單條訊息 Token 數量",
+  "conversation_token_count": "目前對話 Token 數量",
+  "conversation_token_limit_hint_short": "建議開啟新對話",
+  "conversation_token_limit_recommend_new_chat": "目前對話已超過 8,000 tokens，建議開啟新對話",
+  "prefill_speed_tokens_per_second": "預填充速度（tokens 每秒）",
+  "decode_speed_tokens_per_second": "解碼速度（tokens 每秒）",
   "current_turn": "目前回合",
   "start_a_new_game": "開始對局",
   "please_wait_for_the_model_to_generate": "請等待模型產生",
@@ -329,11 +372,6 @@
   "prompt": "提示詞",
   "output": "輸出",
   "model_output": "模型輸出: {text}",
-  "@model_output": {
-    "placeholders": {
-      "text": {}
-    }
-  },
   "submit": "提交",
   "regenerate": "重新產生",
   "resume": "恢復",
@@ -407,6 +445,8 @@
   "model": "模型",
   "no_model_selected": "未選擇模型",
   "change": "變更",
+  "edit": "編輯",
+  "editing": "編輯中",
   "status": "狀態",
   "translating": "翻譯中...",
   "idle": "閒置",
@@ -416,38 +456,13 @@
   "start_service": "啟動服務",
   "lan_server": "區域網路伺服器",
   "http_service_port": "HTTP 服務 (連接埠: {port})",
-  "@http_service_port": {
-    "placeholders": {
-      "port": {}
-    }
-  },
   "websocket_service_port": "WebSocket 服務 (連接埠: {port})",
-  "@websocket_service_port": {
-    "placeholders": {
-      "port": {}
-    }
-  },
   "browser_status": "瀏覽器狀態",
   "no_browser_windows_connected": "沒有連接的瀏覽器視窗",
   "start_service_and_open_browser": "啟動服務並開啟支援的瀏覽器頁面。",
   "window_id": "視窗 {id}",
-  "@window_id": {
-    "placeholders": {
-      "id": {}
-    }
-  },
   "x_tabs": "{count} 個分頁",
-  "@x_tabs": {
-    "placeholders": {
-      "count": {}
-    }
-  },
   "queued_x": "排隊中: {count}",
-  "@queued_x": {
-    "placeholders": {
-      "count": {}
-    }
-  },
   "translator_debug_info": "翻譯器偵錯資訊",
   "cached_translations_memory": "快取的翻譯 (記憶體)",
   "cached_translations_disk": "快取的翻譯 (磁碟)",
@@ -534,7 +549,7 @@
   "presence_penalty_with_value": "Presence Penalty: {value}",
   "frequency_penalty_with_value": "Frequency Penalty: {value}",
   "penalty_decay_with_value": "Penalty Decay: {value}",
-  "font_preview_user_message": "Hello! 你好！這是使用者訊息的預覽。",
+  "font_preview_user_message": "Hello! 你好！這是使用者訊息的預覽。\n第二行也會跟著你調整的行距一起變化。",
   "font_preview_markdown_asset": "assets/lib/font_preview/font_preview_zh_Hant.md",
   "ocr_title": "OCR",
   "hide_translations": "隱藏翻譯",
@@ -544,21 +559,14 @@
   "camera": "相機",
   "gallery": "相冊",
   "ocr_guide_text": "點擊 {takePhoto}。RWKV 將翻譯圖片中的文本。",
-  "@ocr_guide_text": {
-    "placeholders": {
-      "takePhoto": {}
-    }
-  },
   "reached_bottom": "敬請期待",
   "open_database_folder": "開啟資料庫資料夾",
   "npu_not_supported_title": "暫未支持您的芯片 {socName} 的 NPU 加速",
-  "@npu_not_supported_title": {
-    "placeholders": {
-      "socName": {}
-    }
-  },
   "adapting_more_inference_chips": "我們正在持續適配更多的推理芯片，敬請期待。",
   "other_files": "其他檔案 (這些檔案可能是已經過期或不再支援的權重 RWKV Chat 無需再使用它們)",
+  "mlx_cache": "MLX/CoreML 快取",
+  "mlx_cache_notice": "刪除 MLX/CoreML 快取可釋放磁碟空間，但下次載入對應的 MLX/CoreML 模型會更慢。",
+  "delete_mlx_cache_confirmation": "確定要刪除這個 MLX/CoreML 快取嗎？",
   "import_weight_file": "匯入權重檔案",
   "import_success": "匯入成功",
   "import_failed": "匯入失敗",
@@ -581,23 +589,11 @@
   "import_all_weight_files": "匯入全部權重檔案",
   "import_all_weight_files_description": "選擇從此應用匯出的 ZIP 檔案。ZIP 檔案中的所有權重檔案將被匯入。如果檔案名稱相同，現有檔案將被覆蓋。",
   "import_all_weight_files_success": "匯入成功：已匯入 {count} 個檔案",
-  "@import_all_weight_files_success": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "invalid_zip_file": "無效的 ZIP 檔案或檔案格式無法識別",
   "no_files_in_zip": "ZIP 檔案中未找到有效的權重檔案",
   "current_model_from_latest_json_not_pth": "目前載入的是 latest.json 中的配置，不是本機 .pth 檔案",
   "no_local_pth_loaded_yet": "暫無已載入的本機 .pth 檔案",
   "ctx_length_label": "ctx {length}",
-  "@ctx_length_label": {
-    "placeholders": {
-      "length": {}
-    }
-  },
   "local_pth_option_files_in_config": "設定檔中的權重",
   "local_pth_option_local_pth_files": "本機 .pth 檔案",
   "select_weights_or_local_pth_hint": "選擇設定檔中的權重或本機 .pth 檔案",
@@ -629,17 +625,7 @@
   "folder_not_found_on_device": "未在您的電腦上發現該資料夾",
   "folder_not_accessible_check_permission": "該資料夾無法存取，請檢查資料夾權限",
   "path_label": "路徑：{path}",
-  "@path_label": {
-    "placeholders": {
-      "path": {}
-    }
-  },
   "local_folder_name": "本機資料夾：{folderName}",
-  "@local_folder_name": {
-    "placeholders": {
-      "folderName": {}
-    }
-  },
   "custom_directory_set": "自訂目錄已設定",
   "reset_to_default_directory": "已恢復預設目錄",
   "failed_to_create_directory": "建立目錄失敗",
@@ -650,33 +636,44 @@
   "moving_files": "正在移動檔案...",
   "already_using_this_directory": "已在使用此目錄",
   "files_moved_with_failures": "{successCount} 個檔案已移動，{failCount} 個失敗",
-  "@files_moved_with_failures": {
-    "placeholders": {
-      "successCount": {},
-      "failCount": {}
-    }
-  },
   "please_manually_migrate_files": "路徑已更新，如需遷移檔案請手動選擇並移動。",
   "open_folder_unsupported_on_platform": "目前作業系統({os})不支援開啟資料夾的操作。",
-  "@open_folder_unsupported_on_platform": {
-    "placeholders": {
-      "os": {}
-      }
-    },
-    "delete_finished": "刪除完成",
-    "failed_to_delete_file": "刪除檔案失敗：{error}",
-    "@failed_to_delete_file": {
-      "placeholders": {
-        "error": {}
-      }
-    },
-    "open_folder_path_is_null": "資料夾路徑為空。",
-    "open_folder_creating_empty": "資料夾不存在，正在建立空資料夾。",
-    "open_folder_created_success": "空資料夾建立成功。",
-    "open_folder_create_failed": "空資料夾建立失敗：{error}",
-    "@open_folder_create_failed": {
-      "placeholders": {
-        "error": {}
-      }
-    }
+  "delete_finished": "刪除完成",
+  "failed_to_delete_file": "刪除檔案失敗：{error}",
+  "open_folder_path_is_null": "資料夾路徑為空。",
+  "open_folder_creating_empty": "資料夾不存在，正在建立空資料夾。",
+  "open_folder_created_success": "空資料夾建立成功。",
+  "open_folder_create_failed": "空資料夾建立失敗：{error}",
+  "model_item_ios18_weight_hint": "升級 iOS 18+ 可使用這款權重，更快更省電",
+  "tts_is_running_please_wait": "TTS 正在運行，請等待其完成",
+  "please_select_a_spk_or_a_wav_file": "請選擇一個預設聲音或錄製自己的聲音",
+  "please_enter_text_to_generate_tts": "請輸入文字以生成語音",
+  "windows_architecture_mismatch_warning": "偵測到架構不相符：目前應用程式 Build Architecture 為 {buildArchitecture}，但 Windows Operating System 為 {operatingSystemArchitecture}。請前往官方下載頁下載相符版本：{url}",
+  "windows_architecture_mismatch_dialog_title": "架構不相符",
+  "windows_architecture_mismatch_dialog_message": "目前應用程式 Build Architecture 為 {buildArchitecture}，但 Windows Operating System 為 {operatingSystemArchitecture}。\n\n請前往官方下載頁下載相符架構的可執行檔：\n{url}",
+  "open_official_download_page": "開啟官方下載頁",
+  "mimic": "模仿",
+  "ask": "提問",
+  "question_generator": "問題產生器",
+  "question_generator_mock_description": "不知道怎麼開口比較好？讓 RWKV 先幫你想一個吧。",
+  "question_generator_mock_batch_description": "一時想不到怎麼問？讓 RWKV 多幫你想幾個問題吧。",
+  "question_generator_empty_chat_hint": "選好上方的問題開頭後，點一下產生，RWKV 會先幫你想一個可以直接提問的問題。",
+  "question_generator_empty_chat_batch_hint": "選好上方的問題開頭後，點一下產生，RWKV 會先幫你想幾個可以直接提問的問題。",
+  "question_generator_tap_generate_hint": "點一下產生，RWKV 會順著你選好的開頭，幫你想出最多 {count} 個問題。",
+  "question_generator_language_switched_hint": "切換語言後，上方可選的問題開頭也會一起改變。挑一個順手的開頭，再讓 RWKV 接著往下想就好。",
+  "question_generator_prefix_guide": "點一下不同的問題開頭，RWKV 會順著這個開頭繼續幫你產生問題。你也可以直接改下面的輸入框，寫一個更符合你想法的開頭。",
+  "question_generator_prefixes": "問題前綴",
+  "question_generator_count": "生成數量",
+  "question_generator_prefix_input_placeholder": "在這裡寫下你想要的問題開頭...",
+  "question_generator_context_prefix_input_placeholder": "如果留空，RWKV 會根據上下文產生問題",
+  "question_generator_prefix_required": "請先輸入一個問題前綴",
+  "question_generator_question_action_guide": "點擊已產生的問題，即可貼到對話輸入框。",
+  "question_language": "我想讓 RWKV 以這種語言提問...",
+  "prefix_bank": "前綴組",
+  "prefix_examples": "前綴示例",
+  "generated_questions": "產生的問題",
+  "english": "English",
+  "japanese": "日本語",
+  "korean": "한국어",
+  "russian": "Русский"
 }

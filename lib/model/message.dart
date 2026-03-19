@@ -1,6 +1,11 @@
-import 'package:equatable/equatable.dart';
+// Flutter imports:
 import 'package:flutter/foundation.dart';
+
+// Package imports:
+import 'package:equatable/equatable.dart';
 import 'package:halo/halo.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/func/get_batch_info.dart';
 import 'package:zone/model/message_type.dart';
@@ -30,16 +35,14 @@ final class Message extends Equatable {
   final String? ttsSpeakerName;
   final String? ttsSourceAudioPath;
   final String? ttsInstruction;
-  @Deprecated("")
-  final double? ttsOverallProgress;
-  @Deprecated("")
-  final List<double>? ttsPerWavProgress;
-  @Deprecated("")
-  final List<String>? ttsFilePaths;
 
   final String? modelName;
   final String? runningMode;
   final String? rawDecodeParams;
+  final double? prefillSpeed;
+  final double? decodeSpeed;
+  final int? messageTokensCount;
+  final int? conversationTokensCount;
 
   const Message({
     required this.id,
@@ -58,12 +61,13 @@ final class Message extends Equatable {
     this.ttsInstruction,
     this.ttsCFMSteps = 5,
     this.isSensitive = false,
-    this.ttsOverallProgress,
-    this.ttsPerWavProgress,
-    this.ttsFilePaths,
     this.modelName,
     this.runningMode,
     this.rawDecodeParams,
+    this.prefillSpeed,
+    this.decodeSpeed,
+    this.messageTokensCount,
+    this.conversationTokensCount,
   });
 
   @override
@@ -84,12 +88,13 @@ final class Message extends Equatable {
     ttsSourceAudioPath,
     ttsInstruction,
     isSensitive,
-    ttsOverallProgress,
-    ...ttsPerWavProgress ?? [],
-    ...ttsFilePaths ?? [],
     modelName,
     runningMode,
     rawDecodeParams,
+    prefillSpeed,
+    decodeSpeed,
+    messageTokensCount,
+    conversationTokensCount,
   ];
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -109,12 +114,13 @@ final class Message extends Equatable {
       ttsSourceAudioPath: json["ttsSourceAudioPath"] as String?,
       ttsInstruction: json["ttsInstruction"] as String?,
       isSensitive: json["isSensitive"] as bool,
-      ttsOverallProgress: json["ttsOverallProgress"] as double?,
-      ttsPerWavProgress: json["ttsPerWavProgress"] as List<double>?,
-      ttsFilePaths: json["ttsFilePaths"] as List<String>?,
       modelName: json["modelName"] as String?,
       runningMode: json["runningMode"] as String?,
       rawDecodeParams: json["rawDecodeParams"] as String?,
+      prefillSpeed: (json["prefillSpeed"] as num?)?.toDouble(),
+      decodeSpeed: (json["decodeSpeed"] as num?)?.toDouble(),
+      messageTokensCount: json["messageTokensCount"] as int?,
+      conversationTokensCount: json["conversationTokensCount"] as int?,
     );
   }
 
@@ -136,12 +142,13 @@ final class Message extends Equatable {
       "ttsSourceAudioPath": ttsSourceAudioPath,
       "ttsInstruction": ttsInstruction,
       "isSensitive": isSensitive,
-      "ttsOverallProgress": ttsOverallProgress,
-      "ttsPerWavProgress": ttsPerWavProgress,
-      "ttsFilePaths": ttsFilePaths,
       "modelName": modelName,
       "runningMode": runningMode,
       "rawDecodeParams": rawDecodeParams,
+      "prefillSpeed": prefillSpeed,
+      "decodeSpeed": decodeSpeed,
+      "messageTokensCount": messageTokensCount,
+      "conversationTokensCount": conversationTokensCount,
     };
   }
 
@@ -162,12 +169,13 @@ final class Message extends Equatable {
     String? ttsSourceAudioPath,
     String? ttsInstruction,
     bool? isSensitive,
-    double? ttsOverallProgress,
-    List<double>? ttsPerWavProgress,
-    List<String>? ttsFilePaths,
     String? modelName,
     String? runningMode,
     String? rawDecodeParams,
+    double? prefillSpeed,
+    double? decodeSpeed,
+    int? messageTokensCount,
+    int? conversationTokensCount,
   }) {
     return Message(
       id: id ?? this.id,
@@ -185,12 +193,13 @@ final class Message extends Equatable {
       ttsSourceAudioPath: ttsSourceAudioPath ?? this.ttsSourceAudioPath,
       ttsInstruction: ttsInstruction ?? this.ttsInstruction,
       isSensitive: isSensitive ?? this.isSensitive,
-      ttsOverallProgress: ttsOverallProgress ?? this.ttsOverallProgress,
-      ttsPerWavProgress: ttsPerWavProgress ?? this.ttsPerWavProgress,
-      ttsFilePaths: ttsFilePaths ?? this.ttsFilePaths,
       modelName: modelName ?? this.modelName,
       runningMode: runningMode ?? this.runningMode,
       rawDecodeParams: rawDecodeParams ?? this.rawDecodeParams,
+      prefillSpeed: prefillSpeed ?? this.prefillSpeed,
+      decodeSpeed: decodeSpeed ?? this.decodeSpeed,
+      messageTokensCount: messageTokensCount ?? this.messageTokensCount,
+      conversationTokensCount: conversationTokensCount ?? this.conversationTokensCount,
     );
   }
 
@@ -214,22 +223,19 @@ Message(
   ttsSourceAudioPath: $ttsSourceAudioPath,
   ttsInstruction: $ttsInstruction,
   isSensitive: $isSensitive,
-  ttsOverallProgress: $ttsOverallProgress,
-  ttsPerWavProgress: $ttsPerWavProgress,
-  ttsFilePaths: $ttsFilePaths,
   modelName: $modelName,
   runningMode: $runningMode,
   rawDecodeParams: $rawDecodeParams,
+  prefillSpeed: $prefillSpeed,
+  decodeSpeed: $decodeSpeed,
+  messageTokensCount: $messageTokensCount,
+  conversationTokensCount: $conversationTokensCount,
 )""";
   }
 }
 
 extension MessageX on Message {
   bool get isReasoning => content.startsWith("<think>");
-
-  bool get ttsHasContent => ttsFilePaths?.isNotEmpty ?? false;
-
-  bool get ttsIsDone => (ttsOverallProgress ?? 0.0) >= 1.0;
 
   int get createAtInMS => id;
 
@@ -302,5 +308,8 @@ extension BatchMessage on Message {
 
   List<String> get contentAndTails => content.split(Config.userMsgModifierSep);
 
+  // TODO: 应该作为 msg 的内存值, 不要在 Build 方法中调用, 如果 msg 没有这个值, 调用并解析, 如果 msg 这个值不为空, 直接取值
+
+  // TODO: @wangce 检查一下什么时候这个方法会被传递空值
   List<SamplerAndPenaltyParam> get parsedDecodeParams => SamplerAndPenaltyParamWithString.fromRawDecodeParams(rawDecodeParams ?? "");
 }

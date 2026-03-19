@@ -1,52 +1,28 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:math' as math;
 
+// Flutter imports:
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
+import 'package:zone/func/format_bytes.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/router/method.dart';
-import 'package:zone/router/router.dart';
+import 'package:zone/router/page_key.dart';
 import 'package:zone/store/p.dart';
 import 'package:zone/widgets/dev_options_dialog.dart';
 import 'package:zone/widgets/form_item.dart';
 
 class Settings extends ConsumerWidget {
-  static final _shown = qs(false);
-
-  static Future<void> show() async {
-    qq;
-    if (_shown.q) return;
-    _shown.q = true;
-    final context = getContext();
-    if (context == null || !context.mounted) {
-      _shown.q = false;
-      return;
-    }
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: .75,
-          maxChildSize: .85,
-          minChildSize: .5,
-          expand: false,
-          snap: false,
-          builder: (context, scrollController) {
-            return Settings(scrollController: scrollController, noBorderRadiusAndAppBar: false);
-          },
-        );
-      },
-    );
-    _shown.q = false;
-  }
-
   final ScrollController? scrollController;
 
   final bool noBorderRadiusAndAppBar;
@@ -62,7 +38,6 @@ class Settings extends ConsumerWidget {
     final s = S.of(context);
     final paddingBottom = ref.watch(P.app.quantizedIntPaddingBottom);
     final paddingTop = ref.watch(P.app.paddingTop);
-    final demoType = ref.watch(P.app.demoType);
     final iconPath = "assets/img/chat/icon.png";
     final version = ref.watch(P.app.version);
     final buildNumber = ref.watch(P.app.buildNumber);
@@ -71,13 +46,13 @@ class Settings extends ConsumerWidget {
     final preferredLanguage = ref.watch(P.preference.preferredLanguage);
     final paddingLeft = ref.watch(P.app.paddingLeft);
     final qb = ref.watch(P.app.qb);
-    final customTheme = ref.watch(P.app.customTheme);
-    final isLightMode = customTheme.isLight;
+    final appTheme = ref.watch(P.app.theme);
+    final isLightMode = appTheme.isLight;
     final preferredThemeMode = ref.watch(P.app.preferredThemeMode);
-    final isChat = demoType == .chat;
     final checkingLatestVersion = ref.watch(P.app.checkingLatestVersion);
+    final tabBarHeight = appTheme.tabBarHeight;
 
-    final totalUsage = ref.watch(P.remote.totalSizeInModelsDirDisplay);
+    final totalUsage = formatBytes(ref.watch(P.remote.totalSizeInModelsDir));
 
     final iconWidget = SizedBox(
       width: 64,
@@ -96,14 +71,14 @@ class Settings extends ConsumerWidget {
               topRight: .circular(16),
             ),
       child: Scaffold(
-        backgroundColor: demoType == .chat ? Colors.transparent : customTheme.setting,
+        backgroundColor: appTheme.settingBg,
         appBar: noBorderRadiusAndAppBar
             ? null
             : AppBar(
                 automaticallyImplyLeading: false,
                 title: Text(s.settings),
                 centerTitle: false,
-                backgroundColor: customTheme.setting,
+                backgroundColor: appTheme.settingBg,
                 actions: [
                   Padding(
                     padding: const .only(right: 8),
@@ -117,10 +92,14 @@ class Settings extends ConsumerWidget {
                 ],
               ),
         body: ListView(
-          padding: .only(left: 12 + paddingLeft, top: paddingTop, right: 12, bottom: math.max(paddingBottom, 12)),
+          padding: .only(
+            left: 12 + paddingLeft,
+            top: paddingTop + 12,
+            right: 12,
+            bottom: math.max(paddingBottom, 12) + tabBarHeight + 12,
+          ),
           controller: scrollController,
           children: [
-            if (isChat) const SizedBox(height: 40),
             Row(
               mainAxisAlignment: .center,
               children: [iconWidget],
@@ -132,24 +111,28 @@ class Settings extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     Config.appTitle,
-                    style: TS(s: 24),
+                    style: TS(s: 24, w: .w500),
                     textAlign: TextAlign.center,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: .center,
-              children: [
-                Text(version, style: const TS(s: 12)),
-                Text(" ($buildNumber)", style: const TS(s: 12)),
-              ],
+            Opacity(
+              opacity: appTheme.settingVersionOpacity,
+              child: Row(
+                mainAxisAlignment: .center,
+                children: [
+                  Text(version, style: const TS(s: 12)),
+                  Text(" ($buildNumber)", style: const TS(s: 12)),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
+            appTheme.settingsSectionTitleBottomSpace.h,
             Row(
               mainAxisAlignment: .start,
               children: [
+                appTheme.settingsSectionTitleLeftSpace.w,
                 Expanded(
                   child: Text(
                     s.application_settings,
@@ -158,7 +141,7 @@ class Settings extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            appTheme.settingsSectionTitleTopSpace.h,
             FormItem(
               isSectionStart: true,
               icon: Icon(Icons.manage_accounts, color: qb.q(.667), size: 16),
@@ -178,7 +161,7 @@ class Settings extends ConsumerWidget {
               infoText: preferredLanguage.display ?? s.follow_system,
               onTap: P.preference.showLocaleDialog,
             ),
-            if (isChat && userType.isGreaterThan(.user))
+            if (userType.isGreaterThan(.user))
               FormItem(
                 icon: Icon(Icons.settings_applications, color: qb.q(.667), size: 16),
                 title: S.current.advance_settings,
@@ -198,10 +181,11 @@ class Settings extends ConsumerWidget {
               infoText: totalUsage,
               onTap: () => push(.weightManager),
             ),
-            const SizedBox(height: 12),
+            appTheme.settingsSectionTitleBottomSpace.h,
             Row(
               mainAxisAlignment: .start,
               children: [
+                appTheme.settingsSectionTitleLeftSpace.w,
                 Expanded(
                   child: Text(
                     s.join_the_community,
@@ -210,7 +194,7 @@ class Settings extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            appTheme.settingsSectionTitleTopSpace.h,
             FormItem(
               icon: Icon(Icons.chat_bubble_outline, color: qb.q(.667), size: 16),
               isSectionStart: true,
@@ -224,6 +208,13 @@ class Settings extends ConsumerWidget {
               subtitle: "${s.technical_research_group}: 325154699",
               onTap: _openQQGroup2,
             ),
+            if (kDebugMode)
+              FormItem(
+                icon: Icon(Icons.chat_bubble_outline, color: qb.q(.667), size: 16),
+                title: "Test Page",
+                subtitle: "Test Page",
+                onTap: _onTestPageClicked,
+              ),
             FormItem(
               icon: Icon(Icons.chat_bubble_outline, color: qb.q(.667), size: 16),
               title: s.discord,
@@ -237,17 +228,20 @@ class Settings extends ConsumerWidget {
               subtitle: "@BlinkDL_AI",
               onTap: _openTwitter,
             ),
-            const SizedBox(height: 12),
+            appTheme.settingsSectionTitleBottomSpace.h,
             Row(
               mainAxisAlignment: .start,
               children: [
-                Text(
-                  s.about,
-                  style: TS(w: .w500, c: qb.q(.8), s: 12),
+                appTheme.settingsSectionTitleLeftSpace.w,
+                Expanded(
+                  child: Text(
+                    s.about,
+                    style: TS(w: .w500, c: qb.q(.8), s: 12),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            appTheme.settingsSectionTitleTopSpace.h,
             FormItem(
               isSectionStart: true,
               title: s.feedback,
@@ -313,6 +307,11 @@ class Settings extends ConsumerWidget {
     } else {
       launchUrlString("https://qm.qq.com/q/y0gOHcguty", mode: LaunchMode.externalApplication);
     }
+  }
+
+  void _onTestPageClicked() async {
+    qq;
+    push(PageKey.test);
   }
 
   void _openQQGroup2() async {

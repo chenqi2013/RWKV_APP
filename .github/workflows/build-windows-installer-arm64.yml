@@ -7,6 +7,11 @@ on:
     tags:
       - "[0-9]*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to publish installer assets to (e.g. 4.0.6). Leave empty to skip release/upload."
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,11 +62,53 @@ jobs:
         with:
           filter_decrypt_pass: ${{ secrets.FILTER_DECRYPT_PASS }}
 
+      - name: 🪟 Enable QNN Windows Assets (arm64)
+        shell: pwsh
+        run: |
+          $pubspecPath = "pubspec.yaml"
+          $content = Get-Content -Path $pubspecPath -Raw
+
+          $content = $content -replace '(?m)^(\s*)#\s*-\s*path:\s*assets/lib/qnn-windows/\s*$', '$1- path: assets/lib/qnn-windows/'
+          $content = $content -replace '(?m)^(\s*)#\s*platforms:\s*\[windows\]\s*$', '$1  platforms: [windows]'
+
+          Set-Content -Path $pubspecPath -Value $content -Encoding UTF8
+
+          if (-not ($content -match '(?m)^\s*-\s*path:\s*assets/lib/qnn-windows/\s*$')) {
+            throw "Failed to enable assets/lib/qnn-windows in pubspec.yaml"
+          }
+          if (-not ($content -match '(?m)^\s*platforms:\s*\[windows\]\s*$')) {
+            throw "Failed to enable windows platform mapping for qnn-windows in pubspec.yaml"
+          }
+
+          Write-Host "✅ Enabled windows-arm64 QNN assets in pubspec.yaml"
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Windows arm64
         run: flutter build windows
+
+      - name: 🔎 Verify QNN Windows assets in build output
+        shell: pwsh
+        run: |
+          $assetsRoot = "build\windows\arm64\runner\Release\data\flutter_assets\assets\lib"
+          $qnnWindowsDir = Join-Path $assetsRoot "qnn-windows"
+          $qnnAndroidDir = Join-Path $assetsRoot "qnn"
+
+          if (-not (Test-Path $qnnWindowsDir)) {
+            throw "Expected qnn-windows assets are missing from build output: $qnnWindowsDir"
+          }
+
+          $qnnWindowsFiles = Get-ChildItem -Path $qnnWindowsDir -File -ErrorAction Stop
+          if ($qnnWindowsFiles.Count -eq 0) {
+            throw "qnn-windows directory exists but contains no files: $qnnWindowsDir"
+          }
+
+          if (Test-Path $qnnAndroidDir) {
+            throw "Unexpected Android qnn assets found in Windows arm64 build: $qnnAndroidDir"
+          }
+
+          Write-Host "✅ QNN Windows assets verification passed"
 
       - name: 🧹 Remove x64 DLLs
         shell: pwsh
@@ -120,6 +167,7 @@ jobs:
           AppPublisher=RWKV Community
           DefaultDirName={autopf}\RWKV Chat
           DisableProgramGroupPage=yes
+          PrivilegesRequired=admin
           OutputDir=$outputDir
           OutputBaseFilename=$installerName
           Compression=lzma
@@ -136,12 +184,15 @@ jobs:
           [Files]
           Source: "$sourceDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+          [Registry]
+          Root: HKLM; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\RWKV_Chat.exe"; ValueData: "~ RUNASADMIN"; Flags: uninsdeletevalue
+
           [Icons]
           Name: "{autoprograms}\RWKV Chat"; Filename: "{app}\RWKV_Chat.exe"
           Name: "{autodesktop}\RWKV Chat"; Filename: "{app}\RWKV_Chat.exe"; Tasks: desktopicon
 
           [Run]
-          Filename: "{app}\RWKV_Chat.exe"; Description: "{cm:LaunchProgram,RWKV Chat}"; Flags: nowait postinstall skipifsilent
+          Filename: "{app}\RWKV_Chat.exe"; Description: "{cm:LaunchProgram,RWKV Chat}"; Flags: nowait postinstall skipifsilent runascurrentuser
           "@
 
           $issContent | Out-File -FilePath "setup-arm64.iss" -Encoding ASCII
@@ -156,25 +207,27 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           generate_release_notes: false
+          fail_on_unmatched_files: true
           files: build/windows/installer-arm64/*.exe
 
       - name: 🛠️ Setup Python
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           check-latest: true
 
       - name: 📦 Install dependencies
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         shell: pwsh
         run: pip install huggingface_hub
 
       - name: 📤 Upload to HuggingFace
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         shell: pwsh
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

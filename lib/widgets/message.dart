@@ -1,35 +1,40 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:math' as math;
 
+// Flutter imports:
 import 'package:flutter/foundation.dart';
-import 'package:halo_alert/halo_alert.dart';
+import 'package:flutter/material.dart';
+
+// Package imports:
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:photo_viewer/photo_viewer.dart';
-import 'package:sprintf/sprintf.dart';
+
+// Project imports:
 import 'package:zone/args.dart';
 import 'package:zone/config.dart';
 import 'package:zone/func/get_batch_info.dart';
 import 'package:zone/gen/l10n.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:halo/halo.dart';
+import 'package:zone/model/app_theme.dart';
+import 'package:zone/model/cot_display_state.dart';
 import 'package:zone/model/demo_type.dart';
 import 'package:zone/model/message.dart' as model;
-import 'package:zone/model/ref_info.dart' as model;
 import 'package:zone/model/world_type.dart';
-import 'package:zone/router/router.dart';
 import 'package:zone/store/p.dart';
-import 'package:zone/widgets/chat/batch_message_content.dart';
 import 'package:zone/widgets/bot_message_bottom.dart';
-import 'package:zone/widgets/chat/search_reference_dialog.dart';
-import 'package:zone/widgets/talk/bot_tts_content.dart';
-import 'package:zone/widgets/see/photo_viewer_overlay.dart';
-import 'package:zone/widgets/user_message_bottom.dart';
-import 'package:zone/widgets/talk/user_tts_content.dart';
+import 'package:zone/widgets/chat/batch_message_content.dart';
+import 'package:zone/widgets/chat/reference_info.dart';
 import 'package:zone/widgets/markdown_render.dart';
+import 'package:zone/widgets/see/photo_viewer_overlay.dart';
+import 'package:zone/widgets/talk/bot_tts_content.dart';
+import 'package:zone/widgets/talk/user_tts_content.dart';
+import 'package:zone/widgets/user_message_bottom.dart';
 
-class Message extends ConsumerWidget {
+const double _kBubbleMinHeight = 44.0;
+const double _kBubbleMaxWidthAdjust = .0;
+
+class Message extends ConsumerStatefulWidget {
   final model.Message msg;
   final bool selectMode;
   final DemoType? preferredDemoType;
@@ -45,357 +50,188 @@ class Message extends ConsumerWidget {
     this.preferredDemoType,
   });
 
-  void _onTap() async {
-    qq;
+  @override
+  ConsumerState<Message> createState() => _MessageState();
+}
 
-    if (P.rwkv.currentWorldType.q != null) {
-      Focus.of(getContext()!).unfocus();
-    }
+class _MessageState extends ConsumerState<Message> {
+  bool _desktopUserMessageHovered = false;
 
-    P.chat.focusNode.unfocus();
-    P.talk.dismissAllShown();
-
-    P.msg.latestClicked.q = msg;
-
-    if (msg.type == .ttsGeneration) {
-      final start = DateTime.now().millisecondsSinceEpoch;
-      final end = DateTime.now().millisecondsSinceEpoch;
-      qqq("mergeWavFiles: ${end - start}ms");
-      if (P.see.playing.q) {
-        P.see.stopPlaying();
-      } else {
-        if (!msg.ttsIsDone) Alert.info(S.current.playing_partial_generated_audio);
-        P.see.play(path: msg.audioUrl!);
-      }
-      return;
-    }
+  void _onDesktopHoverChanged(bool hovered) {
+    if (_desktopUserMessageHovered == hovered) return;
+    setState(() {
+      _desktopUserMessageHovered = hovered;
+    });
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final msg = widget.msg;
+    final index = widget.index;
+    final selectMode = widget.selectMode;
+    final preferredDemoType = widget.preferredDemoType;
     final s = S.of(context);
-    final qb = ref.watch(P.app.qb);
-    final primary = Theme.of(context).colorScheme.primary;
-    final primaryContainer = Theme.of(context).colorScheme.primaryContainer;
 
+    final appTheme = ref.watch(P.app.theme);
+    final qb = ref.watch(P.app.qb);
     final DemoType demoType = preferredDemoType ?? ref.watch(P.app.demoType);
     final worldType = ref.watch(P.rwkv.currentWorldType);
-
-    // 由 message 对象是否正在 changing 来决定是否根据 receivedTokens 渲染消息内容
-    final received = ref.watch(P.chat.receivedTokens.select((v) => msg.changing ? v : ""));
-    final cotDisplayState = ref.watch(P.msg.cotDisplayState(msg.id));
-
+    final isMobile = ref.watch(P.app.isMobile);
+    final sharingMode = ref.watch(P.chat.isSharing);
     final editingIndex = ref.watch(P.msg.editingOrRegeneratingIndex);
-
     final receiveId = ref.watch(P.chat.receiveId);
     final receiving = ref.watch(P.rwkv.generating);
-
     final inSee = ref.watch(P.app.pageKey) == .see;
-    final isMine = msg.isMine;
-    final isChat = demoType == .chat;
-    final Alignment alignment = isMine ? .centerRight : .centerLeft;
-    const marginHorizontal = 12.0;
-    const marginVertical = .0;
-    const kBubbleMinHeight = 44.0;
-    const kBubbleMaxWidthAdjust = .0;
-
-    final content = msg.content;
-    final changing = msg.changing;
-    final reference = msg.reference;
-
-    String finalContent = changing ? (received.isEmpty ? content : received) : content;
-    if (msg.isSensitive) finalContent = s.filter;
-    if (inSee && isMine) finalContent = finalContent.replaceAll(RegExp(r"<image>.*?</image>"), "");
-
-    finalContent = finalContent.replaceAll("\n", "\n\n");
-    while (finalContent.contains("\n\n\n")) {
-      finalContent = finalContent.replaceAll("\n\n\n", "\n\n");
-    }
-
-    if (isMine) finalContent = finalContent.replaceAll("\n\n", "\n");
-    if (isMine) finalContent = finalContent.split(Config.userMsgModifierSep)[0];
-
-    switch (demoType) {
-      case .tts:
-        finalContent = "";
-      case .chat:
-      case .fifthteenPuzzle:
-      case .othello:
-      case .sudoku:
-      case .see:
-        break;
-    }
-
-    final reasoning = finalContent.startsWith("<think>") && !msg.isSensitive;
-
-    String cotContent = "";
-    String cotResult = "";
-
-    final subStringCount = worldType == WorldType.reasoningQA ? 8 : 8;
-
-    if (reasoning) {
-      assert(!msg.isMine);
-      final isCot = finalContent.startsWith("<think>");
-      if (isCot) {
-        if (finalContent.contains("</think>")) {
-          final endIndex = finalContent.indexOf("</think>");
-          cotContent = finalContent.substring(7, endIndex);
-          if (endIndex + subStringCount < finalContent.length) {
-            final startIndex = endIndex + subStringCount;
-            cotResult = finalContent.substring(startIndex).trim();
-            if (worldType == WorldType.reasoningQA) {
-              if (cotResult.endsWith("</answer>")) cotResult = cotResult.replaceFirst("</answer>", "");
-              if (cotResult.startsWith("<answer>")) cotResult = cotResult.replaceFirst("<answer>", "");
-            }
-          } else {
-            cotResult = "";
-          }
-        } else {
-          cotContent = finalContent.substring(7);
-          cotResult = "";
-        }
-      }
-    }
-
-    final isHistoryForEditing = editingIndex != null && editingIndex > index;
-    final isEditing = editingIndex != null && editingIndex == index;
-    final isFutureForEditing = editingIndex != null && editingIndex < index;
-
-    final width = ref.watch(P.app.screenWidth);
-
-    double opacity = 1;
-
-    if (isHistoryForEditing) {
-      opacity = .667;
-    } else if (isFutureForEditing) {
-      opacity = .333;
-    } else if (isEditing) {
-      opacity = 1;
-    } else {
-      opacity = 1;
-    }
-
-    final thisMessageIsReceiving = receiveId == msg.id && receiving;
-
-    final rawFontSize = Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14.0;
-    final userMessageStyle = TS(s: rawFontSize * Config.msgFontScale);
-
-    double? cotContentHeight;
-
-    switch (cotDisplayState) {
-      case .showCotHeaderIfCotResultIsEmpty:
-        if (cotResult.isEmpty) {
-          cotContentHeight = null;
-        } else {
-          cotContentHeight = 0;
-        }
-      case .showCotHeaderAndCotContent:
-        cotContentHeight = null;
-      case .hideCotHeader:
-        cotContentHeight = 0;
-    }
-
-    final showingCotContent = cotContentHeight != 0;
-
-    final isUserImage = msg.type == .userImage;
-
-    String worldDemoMessageHeader = "";
-
-    EdgeInsets padding = const .only(left: 12, top: 12, right: 12);
-    Border? border = .all(color: primary.q(.2));
-    double radius = 20;
-
-    switch (msg.type) {
-      case .userTTS:
-      case .ttsGeneration:
-        radius = 16;
-      case .userImage:
-      case .text:
-    }
-
-    BorderRadius? borderRadius = .only(
-      topLeft: .circular(isMine ? radius : 0),
-      topRight: .circular(radius),
-      bottomLeft: .circular(radius),
-      bottomRight: .circular(isMine ? 0 : radius),
-    );
-
-    BorderRadius clipBorderRadius = .zero;
-
-    switch (msg.type) {
-      case .userImage:
-        padding = .zero;
-        border = Border.all(width: 0);
-        clipBorderRadius = borderRadius;
-        borderRadius = null;
-
-      case .userTTS:
-        padding = .zero;
-
-      case .text:
-        if (!msg.isMine) border = null;
-        if (!msg.isMine) padding = const .only(left: 6, top: 12, right: 6);
-      case .ttsGeneration:
-    }
-
     final screenWidth = ref.watch(P.app.screenWidth);
     final screenHeight = ref.watch(P.app.screenHeight);
-    final rawMaxWidth = math.min(screenWidth, screenHeight);
-
-    // 如果是快速考 <think>\n<think>, 则不展示思考过程
-    final isQuickThinking = cotContent.trim().isEmpty;
-
-    if (isChat) {
-      border = null;
-      padding = const .only(left: 12, top: 12, right: 12, bottom: 4);
-      borderRadius = .circular(16);
-    }
-
-    final botMessageBackgroundColor = Theme.of(context).colorScheme.surface;
-
-    late final bool isBatch;
-    late final int batchCount;
-
-    if (isMine) {
-      isBatch = false;
-    } else {
-      (_, isBatch, batchCount, _) = getBatchInfo(finalContent);
-    }
-
-    if (isBatch) padding = padding.copyWith(left: 0, right: 0);
-
+    final received = ref.watch(P.chat.receivedTokens.select((String value) => msg.changing ? value : ""));
+    final cotDisplayState = ref.watch(P.msg.cotDisplayState(msg.id));
     final batchSelection = ref.watch(P.msg.batchSelection(msg));
+    final messageLineHeight = ref.watch(P.preference.effectiveMessageLineHeight);
 
-    final bubbleContent = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: width - kBubbleMaxWidthAdjust, minHeight: kBubbleMinHeight),
-      child: ClipRRect(
-        borderRadius: clipBorderRadius,
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: isMine ? primaryContainer : botMessageBackgroundColor,
-            border: border,
-            borderRadius: borderRadius,
-          ),
-          child: Column(
-            crossAxisAlignment: isMine ? .end : .start,
-            children: [
-              if (kDebugMode && Args.debugMsgId)
-                Container(
-                  decoration: BoxDecoration(color: Colors.red.q(1)),
-                  child: Text("Debug: ${msg.id}", style: const TS(c: kW)),
-                ),
-              if (isMine) ...[
-                // 🔥 User message
-                if (!isUserImage && finalContent.isNotEmpty) Text(finalContent, style: userMessageStyle),
-                // 🔥 User message image
-                if (isUserImage)
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: rawMaxWidth * .8, maxHeight: rawMaxWidth * .8),
-                    child: PhotoViewerImage(
-                      borderRadius: 24,
-                      imageUrl: msg.imageUrl!,
-                      showDefaultCloseButton: false,
-                      overlayBuilder: (context) {
-                        return const PhotoViewerOverlay();
-                      },
-                    ),
-                  ),
-                // 🔥 User message audio
-                if (preferredDemoType == .tts) UserTTSContent(msg, index),
-                UserMessageBottom(msg, index),
-              ],
-              if (!isMine) ...[
-                if (isBatch)
-                  Padding(
-                    padding: const .only(left: 14, right: 14, bottom: 4),
-                    child: Wrap(
-                      children: [
-                        Text(
-                          s.batch_inference_running(batchCount),
-                          style: const TS(c: kCG),
-                        ),
-                        if (batchSelection != null) const SizedBox(width: 16),
-                        if (batchSelection != null)
-                          Text(
-                            s.batch_inference_selected(batchSelection + 1),
-                            style: const TS(c: kCG),
-                          ),
-                      ],
-                    ),
-                  ),
-                // 🔥 Bot message audio recognition result
-                if (worldDemoMessageHeader.isNotEmpty)
-                  Text(
-                    worldDemoMessageHeader,
-                    style: TS(c: qb.q(.5), w: .w700, s: 10),
-                  ),
-                if (worldDemoMessageHeader.isNotEmpty) const SizedBox(height: 4),
-                // 🔥 Bot message
-                if (!reasoning && !isBatch) MarkdownRender(raw: finalContent),
-                // 🔥 Bot message cot header
-                if (reasoning && !isQuickThinking && !isBatch)
-                  Semantics(
-                    button: true,
-                    label: s.thought_result,
-                    expanded: showingCotContent,
-                    child: GestureDetector(
-                      onTap: () {
-                        if (showingCotContent) {
-                          P.msg.cotDisplayState(msg.id).q = .hideCotHeader;
-                        } else {
-                          P.msg.cotDisplayState(msg.id).q = .showCotHeaderAndCotContent;
-                        }
-                      },
-                      child: Container(
-                        decoration: const BoxDecoration(color: Colors.transparent),
-                        child: Row(
-                          children: [
-                            Text(
-                              thisMessageIsReceiving ? s.thinking : s.thought_result,
-                              style: TS(c: qb.q(.5), w: .w600),
-                            ),
-                            showingCotContent ? Icon(Icons.expand_more, color: qb.q(.5)) : Icon(Icons.expand_less, color: qb.q(.5)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                // 🔥 Bot message cot content
-                if (reasoning && !isQuickThinking && !isBatch) const SizedBox(height: 4),
-                if (reasoning && !isQuickThinking && !isBatch)
-                  AnimatedContainer(
-                    duration: 250.ms,
-                    height: cotContentHeight,
-                    child: MarkdownRender(raw: cotContent, color: qb.q(.55)),
-                  ),
-                // 🔥 Bot message cot result
-                if (cotResult.isNotEmpty && reasoning && showingCotContent && !isQuickThinking && !isBatch) const SizedBox(height: 12),
-                if (cotResult.isNotEmpty && reasoning && !isBatch) MarkdownRender(raw: cotResult),
-                if (isBatch) BatchMessageContent(msg, index, finalContent),
-                if (!selectMode) BotMessageBottom(msg, index, preferredDemoType: preferredDemoType, finalContent: finalContent),
-                if (preferredDemoType == .tts) BotTtsContent(msg, index),
-              ],
-            ],
-          ),
-        ),
+    final isMine = msg.isMine;
+    final contextActions = UserMessageBottom.resolveContextMenuActions(
+      msg: msg,
+      worldType: worldType,
+      selectMessageMode: selectMode || sharingMode,
+    );
+    ref.watch(P.msg.msgNode);
+    final canSwitchUserBranch = isMine && !selectMode && !sharingMode && P.msg.siblingCount(msg) > 1;
+    final canShowUserMessageMenu = contextActions.canEdit || contextActions.canCopy || canSwitchUserBranch;
+
+    final finalContent = _resolveFinalContent(
+      msg: msg,
+      received: received,
+      inSee: inSee,
+      demoType: demoType,
+      s: s,
+    );
+    final showTTSBottomOutsideBubble = !isMine && !selectMode && demoType == .tts;
+    final thinkingData = _resolveThinkingData(
+      msg: msg,
+      finalContent: finalContent,
+      worldType: worldType,
+    );
+    final cotContentHeight = _resolveCotContentHeight(
+      cotDisplayState: cotDisplayState,
+      cotResult: thinkingData.cotResult,
+    );
+    final showingCotContent = cotContentHeight != 0;
+    final batchData = _resolveBatchData(
+      isMine: isMine,
+      finalContent: finalContent,
+    );
+
+    final bubbleStyleData = _resolveBubbleStyleData(
+      msg: msg,
+      isMine: isMine,
+      demoType: demoType,
+      appTheme: appTheme,
+      primary: theme.colorScheme.primary,
+      isBatch: batchData.isBatch,
+    );
+
+    final opacity = _resolveMessageOpacity(
+      editingIndex: editingIndex,
+      index: index,
+    );
+    final thisMessageIsReceiving = receiveId == msg.id && receiving;
+    final rawFontSize = theme.textTheme.bodyMedium?.fontSize ?? 14.0;
+    final userMessageStyle = TS(
+      s: rawFontSize * Config.msgFontScale,
+      height: messageLineHeight,
+    );
+    final double rawMaxWidth = math.min(screenWidth, screenHeight);
+
+    final Widget bubbleContent = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: screenWidth - _kBubbleMaxWidthAdjust,
+        minHeight: _kBubbleMinHeight,
       ),
+      child: isMine
+          ? _UserMessageBubble(
+              msg: msg,
+              index: index,
+              preferredDemoType: preferredDemoType,
+              isMobile: isMobile,
+              desktopActionsHovered: _desktopUserMessageHovered,
+              finalContent: finalContent,
+              userMsgBg: appTheme.userMsgBg,
+              userMessageStyle: userMessageStyle,
+              rawMaxWidth: rawMaxWidth,
+              bubbleStyleData: bubbleStyleData,
+            )
+          : _BotMessageBubble(
+              msg: msg,
+              index: index,
+              selectMode: selectMode,
+              preferredDemoType: preferredDemoType,
+              finalContent: finalContent,
+              botMsgBg: appTheme.botMsgBg,
+              qb: qb,
+              bubbleStyleData: bubbleStyleData,
+              thinkingData: thinkingData,
+              cotContentHeight: cotContentHeight,
+              showingCotContent: showingCotContent,
+              isBatch: batchData.isBatch,
+              batchCount: batchData.batchCount,
+              batchSelection: batchSelection,
+              thisMessageIsReceiving: thisMessageIsReceiving,
+            ),
     );
 
     return GestureDetector(
       child: Align(
-        alignment: alignment,
+        alignment: isMine ? .centerRight : .centerLeft,
         child: IgnorePointer(
           ignoring: editingIndex != null && editingIndex != index,
           child: AnimatedOpacity(
             opacity: opacity,
             duration: 250.ms,
             child: Padding(
-              padding: const .symmetric(horizontal: marginHorizontal, vertical: marginVertical),
+              padding: .only(
+                left: appTheme.msgListMarginLeft,
+                right: appTheme.msgListMarginRight,
+                top: appTheme.msgListMarginTop,
+                bottom: appTheme.msgListMarginBottom,
+              ),
               child: Column(
+                crossAxisAlignment: .start,
                 children: [
-                  if (demoType == .chat && reference.enable) _ReferenceInfo(refInfo: reference, generating: changing),
-                  GestureDetector(onTap: _onTap, child: bubbleContent),
+                  if (demoType == .chat && msg.reference.enable) ReferenceInfo(refInfo: msg.reference, generating: msg.changing),
+                  GestureDetector(
+                    onTap: () => P.chat.onMessageTapped(msg),
+                    onLongPressStart: canShowUserMessageMenu && isMobile
+                        ? (_) {
+                            P.app.hapticLight();
+                            P.chat.showUserMessageContextMenu(
+                              context: context,
+                              canEdit: contextActions.canEdit,
+                              canCopy: contextActions.canCopy,
+                              index: index,
+                              msg: msg,
+                            );
+                          }
+                        : null,
+                    child: isMine && !isMobile
+                        ? MouseRegion(
+                            onEnter: (_) => _onDesktopHoverChanged(true),
+                            onExit: (_) => _onDesktopHoverChanged(false),
+                            child: bubbleContent,
+                          )
+                        : bubbleContent,
+                  ),
+                  if (showTTSBottomOutsideBubble)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: screenWidth - _kBubbleMaxWidthAdjust),
+                      child: BotMessageBottom(
+                        msg,
+                        index,
+                        preferredDemoType: preferredDemoType,
+                        finalContent: finalContent,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -406,127 +242,461 @@ class Message extends ConsumerWidget {
   }
 }
 
-class _ReferenceInfo extends ConsumerStatefulWidget {
-  final model.RefInfo refInfo;
-  final bool generating;
+class _UserMessageBubble extends ConsumerWidget {
+  final model.Message msg;
+  final int index;
+  final DemoType? preferredDemoType;
+  final bool isMobile;
+  final bool desktopActionsHovered;
+  final String finalContent;
+  final Color userMsgBg;
+  final TS userMessageStyle;
+  final double rawMaxWidth;
+  final _BubbleStyleData bubbleStyleData;
 
-  const _ReferenceInfo({required this.refInfo, required this.generating});
+  const _UserMessageBubble({
+    required this.msg,
+    required this.index,
+    required this.preferredDemoType,
+    required this.isMobile,
+    required this.desktopActionsHovered,
+    required this.finalContent,
+    required this.userMsgBg,
+    required this.userMessageStyle,
+    required this.rawMaxWidth,
+    required this.bubbleStyleData,
+  });
 
   @override
-  ConsumerState<_ReferenceInfo> createState() => _ReferenceInfoState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isUserImage = msg.type == .userImage;
+    final debugColor = theme.colorScheme.error;
+    final screenWidth = ref.watch(P.app.screenWidth);
+    ref.watch(P.msg.msgNode);
+    final branchSwitcherAvailable = P.msg.siblingCount(msg) > 1;
 
-class _ReferenceInfoState extends ConsumerState<_ReferenceInfo> {
-  @override
-  Widget build(BuildContext context) {
-    final prefill = ref.watch(P.rwkv.prefillProgress).clamp(0, 1).toDouble();
-
-    final hasError = widget.refInfo.error.isNotEmpty;
-    final showProgress = prefill > 0 && prefill < 1 && widget.generating && !hasError;
-
-    final primary = Theme.of(context).colorScheme.primary;
-    final searching = widget.refInfo.list.isEmpty && widget.generating && !hasError;
-
-    return Column(
-      crossAxisAlignment: .stretch,
-      mainAxisSize: .min,
-      children: [
-        if (widget.refInfo.enable)
-          Align(
-            alignment: .centerLeft,
-            child: InkWell(
-              borderRadius: .circular(20),
-              onTap: hasError || searching ? null : () => SearchReferenceDialog.show(context, widget.refInfo),
-              child: Container(
-                padding: const .symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: primary.q(.1),
-                  borderRadius: .circular(20),
-                ),
-                child: searching
-                    ? _AdvancedBlinkText(text: S.current.searching, color: primary)
-                    : Text(
-                        hasError ? S.current.search_failed : sprintf(S.current.x_pages_found, [widget.refInfo.list.length]),
-                        style: TextStyle(color: primary, fontSize: 12),
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: screenWidth * 0.8),
+      child: Column(
+        mainAxisSize: .min,
+        crossAxisAlignment: .end,
+        children: [
+          Container(
+            padding: bubbleStyleData.padding,
+            decoration: BoxDecoration(
+              color: userMsgBg,
+              border: bubbleStyleData.border,
+              borderRadius: bubbleStyleData.borderRadius,
+            ),
+            child: Column(
+              mainAxisSize: .min,
+              crossAxisAlignment: .end,
+              children: [
+                if (kDebugMode && Args.debugMsgId) _MessageDebugId(msgId: msg.id, debugColor: debugColor),
+                if (!isUserImage && finalContent.isNotEmpty) Text(finalContent, style: userMessageStyle),
+                if (isUserImage)
+                  ClipRRect(
+                    clipBehavior: Clip.antiAlias,
+                    borderRadius: bubbleStyleData.borderRadius,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: rawMaxWidth * .8, maxHeight: rawMaxWidth * .8),
+                      child: PhotoViewerImage(
+                        borderRadius: 24,
+                        imageUrl: msg.imageUrl!,
+                        showDefaultCloseButton: false,
+                        overlayBuilder: (BuildContext context) {
+                          return const PhotoViewerOverlay();
+                        },
                       ),
-              ),
+                    ),
+                  ),
+                if (preferredDemoType == .tts) UserTTSContent(msg, index),
+              ],
             ),
           ),
-        if (showProgress) const SizedBox(height: 8),
-        AnimatedOpacity(
-          opacity: showProgress ? 1 : 0,
-          curve: Curves.linear,
-          duration: const Duration(milliseconds: 100),
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              margin: const .only(bottom: 6),
-              height: showProgress ? 20 : 0,
-              child: Row(
-                mainAxisSize: .max,
+          if (!isMobile || branchSwitcherAvailable)
+            UserMessageBottom(
+              msg,
+              index,
+              showInlineEditAndCopyButtons: !isMobile,
+              desktopActionsHovered: isMobile ? null : desktopActionsHovered,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BotMessageBubble extends ConsumerWidget {
+  final model.Message msg;
+  final int index;
+  final bool selectMode;
+  final DemoType? preferredDemoType;
+  final String finalContent;
+  final Color botMsgBg;
+  final Color qb;
+  final _BubbleStyleData bubbleStyleData;
+  final _ThinkingData thinkingData;
+  final double? cotContentHeight;
+  final bool showingCotContent;
+  final bool isBatch;
+  final int batchCount;
+  final int? batchSelection;
+  final bool thisMessageIsReceiving;
+
+  const _BotMessageBubble({
+    required this.msg,
+    required this.index,
+    required this.selectMode,
+    required this.preferredDemoType,
+    required this.finalContent,
+    required this.botMsgBg,
+    required this.qb,
+    required this.bubbleStyleData,
+    required this.thinkingData,
+    required this.cotContentHeight,
+    required this.showingCotContent,
+    required this.isBatch,
+    required this.batchCount,
+    required this.batchSelection,
+    required this.thisMessageIsReceiving,
+  });
+
+  void _toggleCotContent() {
+    if (showingCotContent) {
+      P.msg.cotDisplayState(msg.id).q = .hideCotHeader;
+      return;
+    }
+    P.msg.cotDisplayState(msg.id).q = .showCotHeaderAndCotContent;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final s = S.of(context);
+    final demoType = preferredDemoType ?? ref.watch(P.app.demoType);
+    final showReasoningHeader = thinkingData.reasoning && !thinkingData.isQuickThinking && !isBatch;
+    final debugColor = theme.colorScheme.error;
+    final cotColor = qb.q(.55);
+    final thoughtLabelColor = qb.q(.5);
+
+    return Container(
+      padding: bubbleStyleData.padding,
+      decoration: BoxDecoration(
+        color: botMsgBg,
+        border: bubbleStyleData.border,
+        borderRadius: bubbleStyleData.borderRadius,
+      ),
+      child: Column(
+        crossAxisAlignment: .start,
+        children: [
+          if (kDebugMode && Args.debugMsgId) _MessageDebugId(msgId: msg.id, debugColor: debugColor),
+          if (isBatch)
+            Padding(
+              padding: const .only(left: 0, right: 0, bottom: 8),
+              child: Wrap(
                 children: [
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(value: prefill, color: primary, backgroundColor: primary.q(.1)),
+                  Text(
+                    s.batch_inference_running(batchCount),
+                    style: const TS(c: kCG),
                   ),
-                  const SizedBox(width: 10),
-                  Text(S.current.analysing_result, style: const TextStyle(fontSize: 12)),
-                  const SizedBox(width: 10),
+                  if (batchSelection != null) const SizedBox(width: 16),
+                  if (batchSelection != null)
+                    Text(
+                      s.batch_inference_selected(batchSelection! + 1),
+                      style: const TS(c: kCG),
+                    ),
                 ],
               ),
             ),
-          ),
-        ),
-      ],
+          if (!thinkingData.reasoning && !isBatch) MarkdownRender(raw: finalContent, useMessageLineHeight: true),
+          if (showReasoningHeader)
+            GestureDetector(
+              onTap: _toggleCotContent,
+              child: Container(
+                decoration: const BoxDecoration(color: Colors.transparent),
+                child: Row(
+                  children: [
+                    Text(
+                      thisMessageIsReceiving ? s.thinking : s.thought_result,
+                      style: TS(c: thoughtLabelColor, w: .w600),
+                    ),
+                    showingCotContent
+                        ? Icon(Icons.expand_more, color: thoughtLabelColor)
+                        : Icon(Icons.expand_less, color: thoughtLabelColor),
+                  ],
+                ),
+              ),
+            ),
+          if (showReasoningHeader) const SizedBox(height: 4),
+          if (showReasoningHeader)
+            AnimatedContainer(
+              duration: 250.ms,
+              height: cotContentHeight,
+              child: MarkdownRender(
+                raw: thinkingData.cotContent,
+                color: cotColor,
+                useMessageLineHeight: true,
+              ),
+            ),
+          if (thinkingData.cotResult.isNotEmpty && thinkingData.reasoning && showingCotContent && !thinkingData.isQuickThinking && !isBatch)
+            const SizedBox(height: 12),
+          if (thinkingData.cotResult.isNotEmpty && thinkingData.reasoning && !isBatch)
+            MarkdownRender(
+              raw: thinkingData.cotResult,
+              useMessageLineHeight: true,
+            ),
+          if (isBatch) BatchMessageContent(msg, index, finalContent),
+          if (demoType == .tts) BotTtsContent(msg, index),
+          if (!selectMode && demoType != .tts)
+            BotMessageBottom(msg, index, preferredDemoType: preferredDemoType, finalContent: finalContent),
+        ],
+      ),
     );
   }
 }
 
-class _AdvancedBlinkText extends StatefulWidget {
-  final String text;
-  final Color color;
+class _MessageDebugId extends StatelessWidget {
+  final int msgId;
+  final Color debugColor;
 
-  const _AdvancedBlinkText({required this.text, required this.color});
-
-  @override
-  _AdvancedBlinkTextState createState() => _AdvancedBlinkTextState();
-}
-
-class _AdvancedBlinkTextState extends State<_AdvancedBlinkText> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<Color?> _colorAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 1),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _colorAnimation = ColorTween(
-      begin: Colors.transparent,
-      end: widget.color,
-    ).animate(_controller);
-  }
+  const _MessageDebugId({
+    required this.msgId,
+    required this.debugColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Text(
-          widget.text,
-          style: TextStyle(fontSize: 12, color: _colorAnimation.value),
-        );
-      },
+    final theme = Theme.of(context);
+    final effectiveDebugColor = debugColor == Colors.transparent ? theme.colorScheme.error : debugColor;
+
+    return Container(
+      decoration: BoxDecoration(color: effectiveDebugColor),
+      child: Text("Debug: $msgId", style: const TS(c: kW)),
+    );
+  }
+}
+
+class _ThinkingData {
+  final bool reasoning;
+  final String cotContent;
+  final String cotResult;
+
+  const _ThinkingData({
+    required this.reasoning,
+    required this.cotContent,
+    required this.cotResult,
+  });
+
+  bool get isQuickThinking => cotContent.trim().isEmpty;
+}
+
+class _BatchData {
+  final bool isBatch;
+  final int batchCount;
+
+  const _BatchData({
+    required this.isBatch,
+    required this.batchCount,
+  });
+}
+
+class _BubbleStyleData {
+  final EdgeInsets padding;
+  final Border? border;
+  final BorderRadius borderRadius;
+
+  const _BubbleStyleData({
+    required this.padding,
+    required this.border,
+    required this.borderRadius,
+  });
+}
+
+String _resolveFinalContent({
+  required model.Message msg,
+  required String received,
+  required bool inSee,
+  required DemoType demoType,
+  required S s,
+}) {
+  String finalContent = msg.changing ? (received.isEmpty ? msg.content : received) : msg.content;
+  if (msg.isSensitive) {
+    finalContent = s.filter;
+  }
+  if (inSee && msg.isMine) {
+    finalContent = finalContent.replaceAll(RegExp(r"<image>.*?</image>"), "");
+  }
+
+  finalContent = finalContent.replaceAll("\n", "\n\n");
+  while (finalContent.contains("\n\n\n")) {
+    finalContent = finalContent.replaceAll("\n\n\n", "\n\n");
+  }
+
+  if (msg.isMine) {
+    finalContent = finalContent.replaceAll("\n\n", "\n");
+    finalContent = finalContent.split(Config.userMsgModifierSep)[0];
+  }
+
+  if (demoType == .tts) return "";
+  return finalContent;
+}
+
+_ThinkingData _resolveThinkingData({
+  required model.Message msg,
+  required String finalContent,
+  required WorldType? worldType,
+}) {
+  final reasoning = finalContent.startsWith("<think>") && !msg.isSensitive;
+  if (!reasoning) {
+    return const _ThinkingData(
+      reasoning: false,
+      cotContent: "",
+      cotResult: "",
     );
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  const thinkStartTagLength = 7;
+  const thinkEndTagLength = 8;
+  final endIndex = finalContent.indexOf("</think>");
+
+  if (endIndex < 0) {
+    final cotContent = finalContent.substring(thinkStartTagLength);
+    return _ThinkingData(
+      reasoning: true,
+      cotContent: cotContent,
+      cotResult: "",
+    );
   }
+
+  final cotContent = finalContent.substring(thinkStartTagLength, endIndex);
+  if (endIndex + thinkEndTagLength >= finalContent.length) {
+    return _ThinkingData(
+      reasoning: true,
+      cotContent: cotContent,
+      cotResult: "",
+    );
+  }
+
+  String cotResult = finalContent.substring(endIndex + thinkEndTagLength).trim();
+  if (worldType == WorldType.reasoningQA) {
+    if (cotResult.endsWith("</answer>")) cotResult = cotResult.replaceFirst("</answer>", "");
+    if (cotResult.startsWith("<answer>")) cotResult = cotResult.replaceFirst("<answer>", "");
+  }
+
+  return _ThinkingData(
+    reasoning: true,
+    cotContent: cotContent,
+    cotResult: cotResult,
+  );
+}
+
+double? _resolveCotContentHeight({
+  required CoTDisplayState cotDisplayState,
+  required String cotResult,
+}) {
+  switch (cotDisplayState) {
+    case .showCotHeaderIfCotResultIsEmpty:
+      if (cotResult.isEmpty) return null;
+      return 0;
+    case .showCotHeaderAndCotContent:
+      return null;
+    case .hideCotHeader:
+      return 0;
+  }
+}
+
+_BatchData _resolveBatchData({
+  required bool isMine,
+  required String finalContent,
+}) {
+  if (isMine) {
+    return const _BatchData(
+      isBatch: false,
+      batchCount: 0,
+    );
+  }
+
+  final (_, bool isBatch, int batchCount, _) = getBatchInfo(finalContent);
+  return _BatchData(
+    isBatch: isBatch,
+    batchCount: batchCount,
+  );
+}
+
+_BubbleStyleData _resolveBubbleStyleData({
+  required model.Message msg,
+  required bool isMine,
+  required DemoType demoType,
+  required AppTheme appTheme,
+  required Color primary,
+  required bool isBatch,
+}) {
+  EdgeInsets padding = appTheme.msgDefaultPadding;
+  Border? border = Border.all(color: primary.q(.2));
+  double radius = 12;
+
+  switch (msg.type) {
+    case .userTTS:
+    case .ttsGeneration:
+      radius = 16;
+    case .userImage:
+    case .text:
+      break;
+  }
+
+  final borderRadius = BorderRadius.only(
+    topLeft: .circular(isMine ? radius : 0),
+    topRight: .circular(radius),
+    bottomLeft: .circular(radius),
+    bottomRight: .circular(radius),
+  );
+
+  switch (msg.type) {
+    case .userImage:
+      padding = .zero;
+      border = Border.all(width: 0, color: Colors.transparent);
+    case .userTTS:
+      padding = .zero;
+    case .text:
+      if (!isMine) {
+        border = null;
+        padding = const .only(left: 6, top: 12, right: 6);
+      }
+    case .ttsGeneration:
+      if (!isMine) {
+        padding = const .only(left: 6, top: 6, right: 6, bottom: 2);
+      }
+      break;
+  }
+
+  if (demoType == .chat) {
+    border = null;
+    padding = isMine ? appTheme.chatUserMsgBubblePadding : appTheme.chatBotMsgBubblePadding;
+  }
+
+  if (demoType == .see && isMine) {
+    padding = appTheme.chatUserMsgBubblePadding.copyWith(bottom: appTheme.chatUserMsgBubblePadding.top);
+  }
+
+  if (isBatch) {
+    padding = padding.copyWith(left: 0, right: 0);
+  }
+
+  return _BubbleStyleData(
+    padding: padding,
+    border: border,
+    borderRadius: borderRadius,
+  );
+}
+
+double _resolveMessageOpacity({
+  required int? editingIndex,
+  required int index,
+}) {
+  if (editingIndex == null) return 1;
+  if (editingIndex > index) return .667;
+  if (editingIndex < index) return .333;
+  return 1;
 }

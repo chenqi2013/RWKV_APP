@@ -1,23 +1,31 @@
+// Dart imports:
 import 'dart:async';
+
+// Flutter imports:
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:halo/halo.dart';
+import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+// Project imports:
 import 'package:zone/args.dart';
 import 'package:zone/config.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:halo/halo.dart';
+import 'package:zone/func/extensions/num.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/language.dart';
 import 'package:zone/router/router.dart';
-import 'package:zone/func/extensions/num.dart';
 import 'package:zone/store/p.dart';
-import 'package:halo_alert/halo_alert.dart';
 import 'package:zone/widgets/debugger.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:zone/widgets/floating_performace_info.dart';
+import 'package:zone/widgets/input_bar_debugger.dart';
 
 void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -78,6 +86,7 @@ Future<void> _debugAppRunner() async {
 FutureOr<void> _configureSentry(SentryFlutterOptions options) {
   options.dsn = 'https://320015d75031601a48829d02f17a8394@o4506895545597952.ingest.us.sentry.io/4508996340482048';
   options.tracesSampleRate = kDebugMode ? 1.0 : .05;
+  // ignore: experimental_member_use
   options.profilesSampleRate = kDebugMode ? 1.0 : .05;
   options.debug = kDebugMode;
   options.diagnosticLevel = SentryLevel.warning;
@@ -108,12 +117,21 @@ class _App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preferredThemeMode = ref.watch(P.app.preferredThemeMode);
-    final customTheme = ref.watch(P.app.customTheme);
-    final brightness = customTheme.isLight ? Brightness.light : Brightness.dark;
-    final demoTypeColorScheme = customTheme.isLight ? P.app.demoType.q.colorScheme : P.app.demoType.q.colorSchemeDark;
-    final modalBarrierColor = customTheme.pagerDim.q(.25);
-    final bottomSheetTheme = BottomSheetThemeData(backgroundColor: customTheme.setting, modalBarrierColor: modalBarrierColor);
-    final appBarTheme = AppBarTheme(scrolledUnderElevation: 0, backgroundColor: customTheme.scaffold);
+    final appTheme = ref.watch(P.app.theme);
+    final brightness = appTheme.isLight ? Brightness.light : Brightness.dark;
+    final appColorScheme = appTheme.colorScheme;
+    final modalBarrierColor = appTheme.pagerDim.q(.25);
+
+    final bottomSheetTheme = BottomSheetThemeData(
+      backgroundColor: appTheme.settingBg,
+      modalBarrierColor: modalBarrierColor,
+    );
+
+    final appBarTheme = AppBarTheme(
+      scrolledUnderElevation: 0,
+      backgroundColor: appTheme.scaffoldBg,
+    );
+
     final preferredUIFont = ref.watch(P.preference.preferredUIFont);
     final _ = ref.watch(P.preference.preferredMonospaceFont);
     final effectiveFont = (preferredUIFont == null || preferredUIFont.isEmpty || preferredUIFont == 'System') ? null : preferredUIFont;
@@ -122,15 +140,17 @@ class _App extends ConsumerWidget {
       fontFamily: effectiveFont,
       fontFamilyFallback: Config.fontFamilyFallback,
       brightness: brightness,
-      colorScheme: demoTypeColorScheme,
+      colorScheme: appColorScheme,
+      primaryColor: appColorScheme.primary,
+      primaryColorLight: appColorScheme.primaryContainer,
       appBarTheme: appBarTheme,
-      scaffoldBackgroundColor: customTheme.scaffold,
+      scaffoldBackgroundColor: appTheme.scaffoldBg,
       bottomSheetTheme: bottomSheetTheme,
       typography: Typography.material2018(),
     );
 
     return MaterialApp.router(
-      color: customTheme.scaffold,
+      color: appTheme.scaffoldBg,
       supportedLocales: _supportedLocales,
       localizationsDelegates: const [
         S.delegate,
@@ -148,14 +168,15 @@ class _App extends ConsumerWidget {
   }
 
   Widget _builder(BuildContext context, Widget? child) {
-    final customTheme = P.app.customTheme.q;
+    final appTheme = P.app.theme.q;
     return _LocaleWrapper(
       child: _TextScaleWrapper(
         child: Stack(
           children: [
-            Positioned(left: 0, right: 0, top: 0, bottom: 0, child: Container(color: customTheme.scaffold)),
+            Positioned(left: 0, right: 0, top: 0, bottom: 0, child: Container(color: appTheme.scaffoldBg)),
             ?child,
             const FloatingPerformaceInfo(),
+            const InputBarDebugger(),
             const Alert(),
             if (kDebugMode) const Debugger(),
           ],

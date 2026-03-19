@@ -75,7 +75,8 @@ class _RWKV {
   late final argumentsPanelShown = qs(false);
   late final logPanelShown = qs(false);
   late final statePanelShown = qs(false);
-  late final showEscapeCharacters = qs(false);
+  late final renderNewlineDirectly = qs(false);
+  late final renderSpaceSymbol = qs(false);
   late final showPrefillLogOnly = qs(true);
 
   late final _thinkingMode = qs<thinking_mode.ThinkingMode>(.fast);
@@ -97,6 +98,10 @@ class _RWKV {
 
   /// 模型加载状态, 曾经被加载过的模型, 也会显示在这里
   late final loadingStatus = qs<Map<FileInfo, LoadingStatus>>({});
+
+  // TODO: @wangce 改成 qsff 以便减少不必要的页面刷新
+  /// 注意, 后端给的是 0-1 的 double, 且, 在模型加载完成时, progress 不一定为 1.0, 可能是, 0.1, 0.5, 0.999, 但是这不影响我们判断模型是否加载完成
+  late final loadingProgress = qs<Map<FileInfo, double>>({});
 
   /// 模型加载完成器, 用于等待模型加载完成
   late final modelLoadingCompleters = qs<Map<FileInfo, Completer<int?>>>({});
@@ -152,13 +157,20 @@ class _RWKV {
     return loadedModels.length;
   });
 
-  late final latestModel = qp((ref) {
+  late final latestModel = qp<FileInfo?>((ref) {
     final loadedModels = ref.watch(P.rwkv.loadedModels);
     final m = loadedModels.keys.lastOrNull;
     if (m?.weightType == .roleplay) {
       return null;
     }
     return m;
+  });
+
+  late final latestModelId = qp<int?>((ref) {
+    final _latestModel = ref.watch(P.rwkv.latestModel);
+    final _loadedModels = ref.watch(P.rwkv.loadedModels);
+    if (_latestModel == null || _loadedModels.isEmpty) return null;
+    return _loadedModels[_latestModel];
   });
 
   late final frontendBatchParamsAreAllSame = qp((ref) {
@@ -238,6 +250,68 @@ class _RWKV {
 }
 
 extension $RWKVLoad on _RWKV {
+  Future<(SendPort?, int?)> loadChat({
+    required FileInfo fileInfo,
+  }) async {
+    qq;
+    prefillSpeed.q = 0;
+    decodeSpeed.q = 0;
+    final tokenizerPath = await fromAssetsToTemp("assets/config/chat/rwkv_vocab_v20230424.txt");
+
+    String modelPath;
+
+    if (fileInfo.fromPthFile) {
+      modelPath = fileInfo.raw;
+    } else {
+      final localFile = P.remote.locals(fileInfo).q;
+      modelPath = localFile.targetPath;
+    }
+
+    final backend = fileInfo.backend;
+
+    if (backend == null) {
+      throw Exception("Backend is null");
+    }
+
+    final enableReasoning = fileInfo.isReasoning;
+
+    if (backend == Backend.mlx || backend == Backend.coreml) {
+      unzippingStatus(fileInfo).q = true;
+      modelPath = await unzipInPlace(modelPath);
+      unzippingStatus(fileInfo).q = false;
+    }
+
+    await _ensureQNNCopied();
+    await _createRWKVIsolateIfNeeded();
+    await _releaseModelByWeightTypeIfNeeded(weightType: .chat);
+    await _releaseModelByWeightTypeIfNeeded(weightType: .roleplay);
+
+    final modelID = await _loadModel(
+      modelPath: modelPath,
+      tokenizerPath: tokenizerPath,
+      backend: backend,
+      fileInfo: fileInfo,
+    );
+    if (modelID == null) {
+      final msg = "Failed to load model, modelID is null";
+      qqw(msg);
+      return (_sendPort, null);
+    }
+    P.app.demoType.q = .chat;
+    loadedModels.q = {
+      ...loadedModels.q,
+      fileInfo: modelID,
+    };
+
+    await setModelConfig(enableReasoning: enableReasoning);
+    await resetSamplerParams(enableReasoning: enableReasoning);
+    await resetMaxLength(enableReasoning: enableReasoning);
+    // send(to_rwkv.GetSamplerParams()); NOTE: already get in resetSamplerParams, so no need here
+    _syncMaxBatchCount();
+
+    return (_sendPort, modelID);
+  }
+
   Future<int?> loadSee({
     required String modelPath,
     required String encoderPath,
@@ -354,68 +428,6 @@ extension $RWKVLoad on _RWKV {
     send(to_rwkv.LoadTTSTextNormalizer(ttsTextNormalizerDatePath));
     send(to_rwkv.LoadTTSTextNormalizer(ttsTextNormalizerPhonePath));
     send(to_rwkv.LoadTTSTextNormalizer(ttsTextNormalizerNumberPath));
-    return (_sendPort, modelID);
-  }
-
-  Future<(SendPort?, int?)> loadChat({
-    required FileInfo fileInfo,
-  }) async {
-    qq;
-    prefillSpeed.q = 0;
-    decodeSpeed.q = 0;
-    final tokenizerPath = await fromAssetsToTemp("assets/config/chat/rwkv_vocab_v20230424.txt");
-
-    String modelPath;
-
-    if (fileInfo.fromPthFile) {
-      modelPath = fileInfo.raw;
-    } else {
-      final localFile = P.remote.locals(fileInfo).q;
-      modelPath = localFile.targetPath;
-    }
-
-    final backend = fileInfo.backend;
-
-    if (backend == null) {
-      throw Exception("Backend is null");
-    }
-
-    final enableReasoning = fileInfo.isReasoning;
-
-    if (backend == Backend.mlx || backend == Backend.coreml) {
-      unzippingStatus(fileInfo).q = true;
-      modelPath = await unzipInPlace(modelPath);
-      unzippingStatus(fileInfo).q = false;
-    }
-
-    await _ensureQNNCopied();
-    await _createRWKVIsolateIfNeeded();
-    await _releaseModelByWeightTypeIfNeeded(weightType: .chat);
-    await _releaseModelByWeightTypeIfNeeded(weightType: .roleplay);
-
-    final modelID = await _loadModel(
-      modelPath: modelPath,
-      tokenizerPath: tokenizerPath,
-      backend: backend,
-      fileInfo: fileInfo,
-    );
-    if (modelID == null) {
-      final msg = "Failed to load model, modelID is null";
-      qqw(msg);
-      return (_sendPort, null);
-    }
-    P.app.demoType.q = .chat;
-    loadedModels.q = {
-      ...loadedModels.q,
-      fileInfo: modelID,
-    };
-
-    await setModelConfig(enableReasoning: enableReasoning);
-    await resetSamplerParams(enableReasoning: enableReasoning);
-    await resetMaxLength(enableReasoning: enableReasoning);
-    // send(to_rwkv.GetSamplerParams()); NOTE: already get in resetSamplerParams, so no need here
-    _syncMaxBatchCount();
-
     return (_sendPort, modelID);
   }
 
@@ -608,11 +620,13 @@ extension $RWKV on _RWKV {
     }
 
     final forceReasoning = thinkingMode.forceReasoning;
+    final addGenerationPrompt = messages.length.isOdd;
     final request = isBatchInference
         ? to_rwkv.ChatBatchAsync(
             batchMessages,
             enableReasoning: reasoning,
             forceReasoning: forceReasoning,
+            addGenerationPrompt: addGenerationPrompt,
             batchSize: batchSize,
             modelID: modelID,
             maxLength: maxLength,
@@ -622,6 +636,7 @@ extension $RWKV on _RWKV {
             messages,
             enableReasoning: reasoning,
             forceReasoning: forceReasoning,
+            addGenerationPrompt: addGenerationPrompt,
             modelID: modelID,
             maxLength: maxLength,
             forceLang: forceChinese ? 1 : null,
@@ -643,7 +658,13 @@ extension $RWKV on _RWKV {
     });
   }
 
-  Stream<from_rwkv.ResponseBatchBufferContent> completion(String prompt, {int batchSize = 1, int? maxLength, int? stopToken}) {
+  Stream<from_rwkv.ResponseBatchBufferContent> completion(
+    String prompt, {
+    int batchSize = 1,
+    int? maxLength,
+    int? stopToken,
+    bool? disableCache,
+  }) {
     prefillSpeed.q = 0;
     decodeSpeed.q = 0;
 
@@ -662,7 +683,14 @@ extension $RWKV on _RWKV {
       return const Stream.empty();
     }
 
-    final request = to_rwkv.GenerateAsync(prompt, batch: batchSize, modelID: modelID, maxLength: maxLength, stopToken: stopToken);
+    final request = to_rwkv.GenerateAsync(
+      prompt,
+      batch: batchSize,
+      modelID: modelID,
+      maxLength: maxLength,
+      stopToken: stopToken,
+      disableCache: disableCache,
+    );
     send(request);
     if (_getTokensTimer != null) _getTokensTimer!.cancel();
 
@@ -730,6 +758,73 @@ extension $RWKV on _RWKV {
       final modelID = entry.value;
       send(to_rwkv.ClearStates(modelID: modelID));
     }
+  }
+
+  Future<int?> calculateTokensCountRaw({
+    required String text,
+    WeightType? preferredWeightType,
+  }) async {
+    if (text.isEmpty) return 0;
+    if (_sendPort == null) return null;
+    final weightType = _resolveWeightTypeForTokenCount(preferredWeightType: preferredWeightType);
+    final modelID = findModelIDByWeightType(weightType: weightType);
+    if (modelID == null) return null;
+
+    final request = to_rwkv.CalculateTokensCountRaw(text, modelID: modelID);
+    send(request);
+
+    try {
+      final response = await broadcastStream
+          .whereType<from_rwkv.TokensCount>()
+          .where((from_rwkv.TokensCount event) => event.req?.requestId == request.requestId)
+          .first
+          .timeout(const Duration(seconds: 3));
+      return response.tokensCount;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> calculateTokensCountFromMessages({
+    required List<String> messages,
+    WeightType? preferredWeightType,
+  }) async {
+    if (messages.isEmpty) return 0;
+    if (_sendPort == null) return null;
+    final weightType = _resolveWeightTypeForTokenCount(preferredWeightType: preferredWeightType);
+    final modelID = findModelIDByWeightType(weightType: weightType);
+    if (modelID == null) return null;
+
+    final request = to_rwkv.CalculateTokensCountFromMessages(messages, modelID: modelID);
+    send(request);
+
+    try {
+      final response = await broadcastStream
+          .whereType<from_rwkv.TokensCount>()
+          .where((from_rwkv.TokensCount event) => event.req?.requestId == request.requestId)
+          .first
+          .timeout(const Duration(seconds: 3));
+      return response.tokensCount;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  WeightType _resolveWeightTypeForTokenCount({
+    WeightType? preferredWeightType,
+  }) {
+    if (preferredWeightType != null) {
+      return preferredWeightType;
+    }
+    final demoType = P.app.demoType.q;
+    return switch (demoType) {
+      .see => .see,
+      .tts => .tts,
+      .sudoku => .sudoku,
+      .othello => .othello,
+      .chat => .chat,
+      .fifthteenPuzzle => .chat,
+    };
   }
 
   void send(to_rwkv.ToRWKV toRwkv) {
@@ -903,6 +998,7 @@ extension $RWKV on _RWKV {
     }
 
     final currentModelIsBefore20250922 = P.rwkv.currentModelIsBefore20250922.q;
+    qqr("currentModelIsBefore20250922: $currentModelIsBefore20250922");
     if (currentModelIsBefore20250922) {
       final current = thinkingMode.q;
       switch (current) {
@@ -926,7 +1022,7 @@ extension $RWKV on _RWKV {
 
     final current = thinkingMode.q;
 
-    final List<({thinking_mode.ThinkingMode key, String label})> actionPairs = [
+    final actionPairs = <({thinking_mode.ThinkingMode key, String label})>[
       (label: s.thinking_mode_off(""), key: .none),
       (label: s.think_button_mode_fast(""), key: .fast),
       (label: s.thinking_mode_high(""), key: .free),
@@ -934,6 +1030,8 @@ extension $RWKV on _RWKV {
       (label: s.think_button_mode_en_short(""), key: .enShort),
       (label: s.think_button_mode_en_long(""), key: .enLong),
     ];
+
+    qqr("actionPairs: $actionPairs");
 
     final actions = actionPairs.map((e) {
       final isCurrent = e.key == current;
@@ -945,7 +1043,7 @@ extension $RWKV on _RWKV {
     final res = await showModalActionSheet<thinking_mode.ThinkingMode>(
       context: getContext()!,
       title: s.think_mode_selector_title,
-      message: s.think_mode_selector_message,
+      message: s.think_mode_selector_message + "\n" + s.think_mode_selector_recommendation,
       actions: actions,
     );
 
@@ -1026,6 +1124,45 @@ extension $RWKV on _RWKV {
   Future<void> refreshStatePanel() async {
     final modelID = findModelIDByWeightType(weightType: .chat);
     if (modelID != null) send(to_rwkv.DumpStateInfo(modelID: modelID));
+  }
+
+  Future<void> setRenderNewlineDirectly(bool value) async {
+    if (renderNewlineDirectly.q == value) {
+      return;
+    }
+
+    renderNewlineDirectly.q = value;
+    await P.preference.saveDebugRenderNewlineDirectly(value);
+  }
+
+  Future<void> toggleRenderNewlineDirectly() async {
+    await setRenderNewlineDirectly(!renderNewlineDirectly.q);
+  }
+
+  Future<void> setRenderSpaceSymbol(bool value) async {
+    if (renderSpaceSymbol.q == value) {
+      return;
+    }
+
+    renderSpaceSymbol.q = value;
+    await P.preference.saveDebugRenderSpaceSymbol(value);
+  }
+
+  Future<void> toggleRenderSpaceSymbol() async {
+    await setRenderSpaceSymbol(!renderSpaceSymbol.q);
+  }
+
+  Future<void> setShowPrefillLogOnly(bool value) async {
+    if (showPrefillLogOnly.q == value) {
+      return;
+    }
+
+    showPrefillLogOnly.q = value;
+    await P.preference.saveDebugShowPrefillLogOnly(value);
+  }
+
+  Future<void> toggleShowPrefillLogOnly() async {
+    await setShowPrefillLogOnly(!showPrefillLogOnly.q);
   }
 
   /// 加载指定 pth 权重并完成聊天用配置（角色、batch、thinkingMode、GetSupportedBatchSizes）。
@@ -1133,6 +1270,7 @@ extension _$RWKV on _RWKV {
   }
 
   void _onGeneratingChanged(bool generating) async {
+    P.app.setKeepScreenAwakeForReason(reason: .generation, enabled: generating);
     if (P.rwkv.generatingId.q == null) return;
     if (!generating) P.rwkv.generatingId.q = null;
   }
@@ -1170,6 +1308,8 @@ extension _$RWKV on _RWKV {
       extra: fileInfo,
     );
     send(req);
+    loadingStatus.q = {...loadingStatus.q, fileInfo: .loading};
+    loadingProgress.q = {...loadingProgress.q, fileInfo: 0.0};
     final modelID = await completer.future;
     modelLoadingCompleters.q = {...modelLoadingCompleters.q..remove(fileInfo)};
     // 如果我们得到的 modelID 为 null, 则表示加载失败
@@ -1405,6 +1545,7 @@ extension _$RWKV on _RWKV {
         } else {
           qqe("modelLoadingCompleter is null,  but status is loaded, this is impossible");
         }
+
       case .failedInLoading:
         if (modelLoadingCompleter != null) {
           modelLoadingCompleter.complete(null);
@@ -1423,6 +1564,7 @@ extension _$RWKV on _RWKV {
           qqe("modelReleasingCompleters: ${modelReleasingCompleters.q}");
           qqe("trying to find completer by id: $modelID");
         }
+
       case .failedInReleasing:
         if (modelReleasingCompleter != null) {
           modelReleasingCompleter.complete(false);
@@ -1431,8 +1573,11 @@ extension _$RWKV on _RWKV {
           qqe("modelReleasingCompleters: ${modelReleasingCompleters.q}");
           qqe("trying to find completer by id: $modelID");
         }
-      case .none:
+
       case .loading:
+        final progress = response.progress;
+        if (progress != null) loadingProgress.q = {...loadingProgress.q, extra: progress};
+      case .none:
       case .releasing:
       case .setQnnLibraryPath:
       case .loadModelWithExtra:
@@ -1517,8 +1662,12 @@ extension _$RWKV on _RWKV {
   }
 
   Future<void> _ensureQNNCopied() async {
-    if (Platform.isAndroid && !_qnnLibsCopied.q) {
-      final qnnLibList = {
+    if (_qnnLibsCopied.q) {
+      return;
+    }
+
+    if (Platform.isAndroid) {
+      final qnnLibList = <String>{
         "libQnnHtp.so",
         "libQnnHtpNetRunExtensions.so",
         "libQnnHtpV68Stub.so",
@@ -1546,25 +1695,30 @@ extension _$RWKV on _RWKV {
         await fromAssetsToTemp("assets/lib/qnn/$lib", targetPath: "assets/lib/$lib");
       }
       _qnnLibsCopied.q = true;
-    } else if (Platform.isWindows && !_qnnLibsCopied.q) {
-      final qnnLibList = {
-        "QnnHtp.dll",
-        "QnnHtpNetRunExtensions.dll",
-        "QnnHtpPrepare.dll",
-        "QnnSystem.dll",
-        "QnnHtpV68Stub.dll",
-        "QnnHtpV73Stub.dll",
-        "QnnHtpV81Stub.dll",
-        "libQnnHtpV73Skel.so",
-        "libQnnHtpV81Skel.so",
-        "libqnnhtpv73.cat",
-        "libqnnhtpv81.cat",
-      };
-      for (final lib in qnnLibList) {
-        await fromAssetsToTemp("assets/lib/qnn-windows/$lib", targetPath: "assets/lib/$lib");
-      }
-      _qnnLibsCopied.q = true;
+      return;
     }
+
+    if (!Platform.isWindows || Abi.current() != Abi.windowsArm64) {
+      return;
+    }
+
+    final qnnLibList = <String>{
+      "QnnHtp.dll",
+      "QnnHtpNetRunExtensions.dll",
+      "QnnHtpPrepare.dll",
+      "QnnSystem.dll",
+      "QnnHtpV68Stub.dll",
+      "QnnHtpV73Stub.dll",
+      "QnnHtpV81Stub.dll",
+      "libQnnHtpV73Skel.so",
+      "libQnnHtpV81Skel.so",
+      "libqnnhtpv73.cat",
+      "libqnnhtpv81.cat",
+    };
+    for (final lib in qnnLibList) {
+      await fromAssetsToTemp("assets/lib/qnn-windows/$lib", targetPath: "assets/lib/$lib");
+    }
+    _qnnLibsCopied.q = true;
   }
 
   /// 解析运行时日志，按 [INFO]、[DEBUG]、[WARN] 等标签分割

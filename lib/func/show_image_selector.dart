@@ -1,9 +1,15 @@
+// Dart imports:
 import 'dart:io';
 
+// Flutter imports:
+import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:adaptive_dialog/adaptive_dialog.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
+// Project imports:
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/router/router.dart';
 
@@ -39,7 +45,7 @@ Future<String?> showImageSelector() async {
     ],
   );
   if (result == null) return null;
-  final ImagePicker picker = ImagePicker();
+  final picker = ImagePicker();
   late final String? imagePath;
   switch (result) {
     case _Actions.takePhoto:

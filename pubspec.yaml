@@ -1,10 +1,10 @@
 name: zone
 description: "An app to show RWKV model in mobile app. Developed with Flutter."
 publish_to: "none"
-version: 3.9.6+672
+version: 4.2.7+699
 
 environment:
-  sdk: ^3.10.0
+  sdk: ^3.11.0
 
 dependencies:
   flutter:
@@ -77,7 +77,7 @@ dependencies:
   flutter_roleplay:
     git:
       url: https://github.com/chenqi2013/flutter_roleplay
-      ref: 0505c3b5ce3524d5d264978c73e46c637680720a
+      ref: ee0ba83637085448569aad8c2d0e24532169b0ea
 
   disable_battery_optimization:
     git:
@@ -103,7 +103,7 @@ dependencies:
   flutter_riverpod: 2.6.1
   flutter_staggered_grid_view: ^0.7.0
   flutter_svg: ^2.2.3
-  font_awesome_flutter:
+  font_awesome_flutter: 10.12.0
   freezed_annotation:
   gaimon:
   gal:
@@ -117,6 +117,7 @@ dependencies:
   intl:
   json_annotation:
   macos_secure_bookmarks: ^0.2.1
+  material_symbols_icons:
   mp_audio_stream:
   package_info_plus:
   path:
@@ -134,22 +135,24 @@ dependencies:
   sqflite_common_ffi:
   system_info2:
   url_launcher:
+  wakelock_plus:
   web_socket_channel:
 
 dependency_overrides:
   rwkv_mobile_flutter:
     path: ../rwkv_mobile_flutter
-  # rwkv_downloader:
-  #   path: ../rwkv_downloader
 
 dev_dependencies:
   build_runner:
   custom_lint:
   drift_dev:
+  flutter_test:
+    sdk: flutter
   flutter_gen_runner:
   flutter_lints:
   freezed:
   icons_launcher:
+  import_sorter:
   json_serializable:
   sentry_dart_plugin:
   test:
@@ -163,12 +166,19 @@ flutter:
     - assets/model/chat/
     - assets/config/chat/
     - assets/img/chat/
-    - assets/lib/qnn/
     - remote/latest.json
     - .env
     - assets/filter.txt
     - assets/lambada_test.jsonl
     - assets/config/code_highlights/
+
+    # QNN libraries for Android
+    - path: assets/lib/qnn/
+      platforms: [android]
+
+    # QNN libraries for Windows (arm64), uncomment when running on Windows ARM64
+    # - path: assets/lib/qnn-windows/
+    #   platforms: [windows]
 
 flutter_intl:
   enabled: true # Required. Must be set to true to activate the plugin. Default: false

@@ -1,12 +1,17 @@
-// ignore: unused_import
-import 'dart:developer';
+// Dart imports:
 import 'dart:ui';
 
+// Flutter imports:
 import 'package:flutter/material.dart';
+
+// Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
+import 'package:sprintf/sprintf.dart';
+
+// Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/func/check_model_selection.dart';
 import 'package:zone/gen/l10n.dart';
@@ -18,9 +23,7 @@ import 'package:zone/widgets/arguments_panel.dart';
 import 'package:zone/widgets/log_panel.dart';
 import 'package:zone/widgets/model_select_button.dart';
 import 'package:zone/widgets/model_selector.dart';
-import 'package:sprintf/sprintf.dart';
 import 'package:zone/widgets/state_panel.dart';
-import 'package:zone/widgets/triangle_painter.dart';
 
 class ChatAppBar extends ConsumerWidget {
   final DemoType? preferredDemoType;
@@ -42,7 +45,7 @@ class ChatAppBar extends ConsumerWidget {
     if (currentModel != null) displayName = currentModel.name;
 
     final theme = Theme.of(context);
-    final scaffoldBackgroundColor = theme.scaffoldBackgroundColor;
+    final appTheme = ref.watch(P.app.theme);
 
     return ClipRRect(
       child: BackdropFilter(
@@ -50,7 +53,7 @@ class ChatAppBar extends ConsumerWidget {
         child: Theme(
           data: theme.copyWith(
             appBarTheme: theme.appBarTheme.copyWith(
-              backgroundColor: scaffoldBackgroundColor,
+              backgroundColor: appTheme.scaffoldBg,
             ),
           ),
           child: selectMessageMode
@@ -95,115 +98,82 @@ class _ChatAppBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final primary = Theme.of(context).colorScheme.primary;
     final completionMode = ref.watch(P.chat.completionMode);
-    final qb = ref.watch(P.app.qb);
-    final customTheme = ref.watch(P.app.customTheme);
-    final scaffold = customTheme.scaffold;
-    final isChat = preferredDemoType == .chat;
-    final isTTS = preferredDemoType == .tts;
-    final isWorld = preferredDemoType == .see;
+    final qt = ref.watch(P.app.theme);
 
     final userType = ref.watch(P.preference.userType);
     final version = ref.watch(P.app.version);
-    final light = ref.watch(P.app.light);
-    Color backgroundColor = light ? const Color.fromRGBO(239, 243, 251, 0.5) : kB.q(.5);
-    if (isChat || isTTS || isWorld) {
-      backgroundColor = backgroundColor;
-    } else {
-      backgroundColor = scaffold.q(.7);
-    }
 
-    return AppBar(
-      elevation: 0,
-      centerTitle: true,
-      backgroundColor: backgroundColor,
-      systemOverlayStyle: customTheme.isLight ? P.app.systemOverlayStyleLight : P.app.systemOverlayStyleDark,
-      title: GestureDetector(
-        onTap: _onTitlePressed,
-        child: Container(
-          decoration: const BoxDecoration(color: Colors.transparent),
-          child: Column(
-            crossAxisAlignment: .center,
-            children: [
-              if (isChat)
-                Row(
-                  mainAxisAlignment: .center,
-                  mainAxisSize: .min,
-                  crossAxisAlignment: .end,
+    final listAtTop = ref.watch(P.chat.listAtTop);
+
+    final backgroundColor = qt.appBarBgC;
+
+    return Column(
+      children: [
+        AppBar(
+          centerTitle: true,
+          backgroundColor: backgroundColor.q(listAtTop ? 1 : 0.5),
+          systemOverlayStyle: qt.isLight ? P.app.systemOverlayStyleLight : P.app.systemOverlayStyleDark,
+          title: Tooltip(
+            message: displayName,
+            child: GestureDetector(
+              onTap: _onTitlePressed,
+              child: Container(
+                decoration: const BoxDecoration(color: Colors.transparent),
+                child: Column(
+                  crossAxisAlignment: .center,
                   children: [
-                    const Text(
-                      Config.appTitle,
-                      style: TextStyle(fontSize: 16, fontWeight: .w600),
+                    Row(
+                      mainAxisAlignment: .center,
+                      mainAxisSize: .min,
+                      crossAxisAlignment: .end,
+                      children: [
+                        const Text(
+                          Config.appTitle,
+                          style: TextStyle(fontSize: 16, fontWeight: .w600),
+                        ),
+                        Padding(
+                          padding: const .only(bottom: 3, left: 1),
+                          child: Text(' $version', style: const TS(s: 8, w: .bold)),
+                        ),
+                      ],
                     ),
-                    Padding(
-                      padding: const .only(bottom: 2, left: 1),
-                      child: Text(' $version', style: const TS(s: 8, w: .bold)),
-                    ),
+                    ModelSelectButton(preferredDemoType: preferredDemoType),
                   ],
                 ),
-              if (!isChat)
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: version,
-                        style: const TS(s: 10, c: Colors.transparent),
-                      ),
-                      const TextSpan(text: Config.appTitle, style: TS(s: 18)),
-                      TextSpan(
-                        text: ' $version',
-                        style: const TS(s: 8),
-                      ),
-                    ],
-                  ),
-                ),
-              if (isChat) const ModelSelectButton(),
-              if (!isChat)
-                Container(
-                  padding: const .only(left: 4, top: 1, right: 4, bottom: 1),
-                  decoration: BoxDecoration(
-                    color: kB.q(.1),
-                    borderRadius: .circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: .min,
-                    crossAxisAlignment: .center,
-                    mainAxisAlignment: .center,
-                    children: [
-                      Text(
-                        displayName,
-                        style: TS(s: 10, c: primary),
-                      ),
-                      const SizedBox(width: 4),
-                      Transform.rotate(
-                        angle: 0, // 90度
-                        child: SizedBox(
-                          width: 10,
-                          height: 5,
-                          child: CustomPaint(
-                            painter: TrianglePainter(color: qb.q(.667)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+              ),
+            ),
           ),
+          // leading: IconButton(onPressed: () {}, icon: const Icon(Icons.arrow_back)),
+          actions: [
+            if ((preferredDemoType == .chat || preferredDemoType == .see) && !completionMode)
+              _NewConversationButton(preferredDemoType: preferredDemoType),
+            if (preferredDemoType == .chat && userType.isGreaterThan(.user)) _MorePopupMenuButton(preferredDemoType: preferredDemoType),
+            if (preferredDemoType != .chat && preferredDemoType != .sudoku && userType.isGreaterThan(.user) && preferredDemoType != .tts)
+              IconButton(
+                onPressed: _onSettingsPressed,
+                icon: const Icon(Icons.tune),
+              ),
+          ],
         ),
-      ),
-      // leading: IconButton(onPressed: () {}, icon: const Icon(Icons.arrow_back)),
-      actions: [
-        if ((preferredDemoType == .chat || preferredDemoType == .see) && !completionMode)
-          _NewConversationButton(preferredDemoType: preferredDemoType),
-        if (preferredDemoType == .chat && userType.isGreaterThan(.user)) _MorePopupMenuButton(preferredDemoType: preferredDemoType),
-        if (preferredDemoType != .chat && preferredDemoType != .sudoku && userType.isGreaterThan(.user))
-          IconButton(
-            onPressed: _onSettingsPressed,
-            icon: const Icon(Icons.tune),
-          ),
+        const _AppBarBottomLine(),
       ],
+    );
+  }
+}
+
+class _AppBarBottomLine extends ConsumerWidget {
+  const _AppBarBottomLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final qt = ref.watch(P.app.theme);
+    final qb = ref.watch(P.app.qb);
+    final listAtTop = ref.watch(P.chat.listAtTop);
+
+    return Container(
+      height: qt.appBarBottomLineHeight,
+      color: listAtTop ? Colors.transparent : qb.q(.2),
     );
   }
 }
@@ -225,11 +195,11 @@ class _MorePopupMenuButton extends ConsumerWidget {
   }
 
   void _logPanelTapped() async {
-    await LogPanel.show(getContext()!);
+    await LogPanel.show();
   }
 
   void _statePanelTapped() async {
-    await StatePanel.show(getContext()!);
+    await StatePanel.show();
   }
 
   @override
@@ -317,19 +287,46 @@ class _NewConversationButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    late final Widget icon;
-
-    icon = const Icon(Icons.add_comment_outlined);
+    final theme = Theme.of(context);
+    final s = S.of(context);
     final isEmpty = ref.watch(P.msg.list.select((v) => v.isEmpty));
+    final currentConversationId = ref.watch(P.msg.msgNode.select((v) => v.createAtInUS));
+    final guideConversationId = ref.watch(P.chat.newConversationGuideConversationId);
+    final showGuide = !isEmpty && guideConversationId == currentConversationId;
+    final iconColor = showGuide ? theme.colorScheme.primary : null;
 
-    return IconButton(
-      onPressed: !isEmpty
-          ? () {
-              if (!checkModelSelection(preferredDemoType: preferredDemoType)) return;
-              P.chat.startNewChat();
-            }
-          : null,
-      icon: icon,
+    final Widget icon = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(Icons.add_comment_outlined, color: iconColor),
+        if (showGuide)
+          Positioned(
+            right: -1,
+            top: -1,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.error,
+                borderRadius: .circular(999),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    return Tooltip(
+      message: showGuide ? s.conversation_token_limit_recommend_new_chat : s.start_a_new_chat,
+      child: IconButton(
+        onPressed: !isEmpty
+            ? () {
+                if (!checkModelSelection(preferredDemoType: preferredDemoType)) return;
+                if (showGuide) P.chat.dismissNewConversationGuide();
+                P.chat.startNewChat();
+              }
+            : null,
+        icon: icon,
+      ),
     );
   }
 }
