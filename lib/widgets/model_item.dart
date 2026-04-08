@@ -11,7 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
-import 'package:rwkv_downloader/downloader.dart' show TaskState;
+import 'package:rwkv_downloader/downloader.dart';
 import 'package:rwkv_mobile_flutter/rwkv.dart';
 import 'package:sprintf/sprintf.dart';
 
@@ -75,6 +75,10 @@ class ModelItem extends ConsumerWidget {
     final modelPath = localFile.targetPath;
     final backend = fileInfo.backend;
 
+    if (P.remote.modelSelectorShown.q) {
+      await pop();
+    }
+
     try {
       P.rwkv.clearStates();
       await P.rwkv.loadSudoku(modelPath: modelPath, backend: backend!);
@@ -85,7 +89,6 @@ class ModelItem extends ConsumerWidget {
     if (!loadButtonTextShowLoad) {
       Alert.success(S.current.you_can_now_start_to_chat_with_rwkv);
     }
-    pop();
   }
 
   Future<void> _onStartTapInChat() async {
@@ -118,10 +121,12 @@ class ModelItem extends ConsumerWidget {
 
     if (backend == null) {
       if (fileInfo.isAlbatross) {
+        if (P.remote.modelSelectorShown.q) {
+          await pop();
+        }
         try {
           await Albatross.instance.load(fileInfo);
           Alert.success(S.current.you_can_now_start_to_chat_with_rwkv);
-          pop();
         } catch (e) {
           Alert.error(e.toString());
         }
@@ -129,6 +134,10 @@ class ModelItem extends ConsumerWidget {
       }
       Alert.error("Backend is null");
       return;
+    }
+
+    if (P.remote.modelSelectorShown.q) {
+      await pop();
     }
 
     try {
@@ -179,7 +188,10 @@ class ModelItem extends ConsumerWidget {
       }
     }
 
-    pop();
+    P.preference.saveLastChatModel({
+      "fileName": fileInfo.fileName,
+      "fileSize": fileInfo.fileSize,
+    });
 
     for (var i = 0; i < 3; i++) {
       (500 * i).msLater.then((_) {

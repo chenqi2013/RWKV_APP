@@ -249,7 +249,8 @@ extension _$Translator on _Translator {
   }
 
   void _handleResponseBufferContent(from_rwkv.ResponseBufferContent res) {
-    qr;
+    final pageKey = P.app.pageKey.q;
+    if (pageKey == .ocr) return;
     // 得到的翻译
     final content = res.responseBufferContent;
     // 更新 result

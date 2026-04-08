@@ -71,6 +71,9 @@ class _Chat {
   /// 已经触发过 token 超限提示的会话集合（纯内存态）
   late final tokenReminderShownConversationIds = qs<Set<int>>({});
 
+  /// 正在后台自动加载上次使用的模型
+  late final isAutoLoadingModel = qs(false);
+
   // ===========================================================================
   // Provider
   // ===========================================================================
@@ -730,6 +733,34 @@ extension $Chat on _Chat {
           final finalizedContent = parentMsg.content.split(Config.batchMarker)[selection];
           final finalizedMsg = parentMsg.copyWith(content: finalizedContent);
           P.msg._syncMsg(parentMsg.id, finalizedMsg);
+
+          // 重新计算 token count（从 batch 全量变为单 slot）
+          unawaited(_refreshTokenCountsForMessage(
+            messageId: parentMsg.id,
+            overrideBotContent: finalizedContent,
+            persistToMessage: true,
+          ));
+
+          // Also finalize the paired user batch message if it exists
+          final userParentNode = P.msg.msgNode.q.findParentByMsgId(parentMsg.id);
+          if (userParentNode != null) {
+            final userParentMsg = P.msg.pool.q[userParentNode.id];
+            if (userParentMsg != null && userParentMsg.isMine) {
+              final userParts = userParentMsg.content.split(Config.userMsgModifierSep);
+              final userRawContent = userParts[0];
+              final userTail = userParts.length > 1 ? userParts.sublist(1).join(Config.userMsgModifierSep) : "";
+              if (getIsBatch(userRawContent)) {
+                final userBatch = userRawContent.split(Config.batchMarker);
+                if (selection < userBatch.length) {
+                  final selectedQuestion = userBatch[selection];
+                  final finalizedUserContent = userTail.isNotEmpty
+                      ? selectedQuestion + Config.userMsgModifierSep + userTail
+                      : selectedQuestion;
+                  P.msg._syncMsg(userParentMsg.id, userParentMsg.copyWith(content: finalizedUserContent));
+                }
+              }
+            }
+          }
         } else {
           Alert.info(S.current.please_select_a_branch_to_continue_the_conversation, position: AlertPosition.bottom);
           return;
@@ -880,6 +911,77 @@ extension $Chat on _Chat {
     final batchCount = this.batchCount.q;
     P.rwkv.send(to_rwkv.GetSamplerAndPenaltyParams(batchSize: batchCount, modelID: modelID));
   }
+
+  Future<void> tryLoadLastChatModel() async {
+    await 500.msLater;
+
+    final last = P.preference.lastChatModel.q;
+    if (last == null) {
+      ModelSelector.show(showNeko: P.app.pageKey.q == .neko);
+      return;
+    }
+
+    final String savedFileName = last["fileName"];
+    final int savedFileSize = last["fileSize"];
+
+    final fileInfo = P.remote.chatWeights.q.firstWhereOrNull(
+      (e) => e.fileName == savedFileName && e.fileSize == savedFileSize,
+    );
+    final localFile = fileInfo != null ? P.remote.locals(fileInfo).q : null;
+
+    if (fileInfo == null || localFile == null || !localFile.hasFile || fileInfo.backend == null) {
+      ModelSelector.show(showNeko: P.app.pageKey.q == .neko);
+      return;
+    }
+
+    // 以上校验通过，确认将要自动加载，开始显示加载动画
+    isAutoLoadingModel.q = true;
+    try {
+      P.rwkv.clearStates();
+      await P.rwkv.loadChat(fileInfo: fileInfo);
+
+      final batchAllowed = fileInfo.tags.contains("batch");
+      if (!batchAllowed) batchEnabled.q = false;
+
+      final isTranslate = fileInfo.tags.contains("translate");
+      final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
+      if (modelID == null) return;
+
+      if (isTranslate) {
+        if (P.translator.enToZh.q) {
+          P.rwkv.send(to_rwkv.SetUserRole("English", modelID: modelID));
+          P.rwkv.send(to_rwkv.SetResponseRole(responseRole: "Chinese", modelID: modelID));
+        } else {
+          P.rwkv.send(to_rwkv.SetUserRole("Chinese", modelID: modelID));
+          P.rwkv.send(to_rwkv.SetResponseRole(responseRole: "English", modelID: modelID));
+        }
+        await P.rwkv.setModelConfig(thinkingMode: .none, prompt: "<EOD>", setPrompt: true);
+        P.backend.start();
+      } else {
+        P.rwkv.send(to_rwkv.SetUserRole("User", modelID: modelID));
+        P.rwkv.send(to_rwkv.SetResponseRole(responseRole: "Assistant", modelID: modelID));
+      }
+
+      if (!isTranslate) {
+        if (P.rwkv.currentModelIsBefore20250922.q) {
+          P.rwkv.setModelConfig(thinkingMode: .lighting);
+        } else {
+          P.rwkv.setModelConfig(thinkingMode: .fast);
+        }
+      }
+
+      for (var i = 0; i < 3; i++) {
+        (500 * i).msLater.then((_) {
+          P.rwkv.send(to_rwkv.GetSupportedBatchSizes(modelID: modelID));
+        });
+      }
+    } catch (e) {
+      qqe("Failed to auto load chat model: $e");
+      ModelSelector.show(showNeko: P.app.pageKey.q == .neko);
+    } finally {
+      isAutoLoadingModel.q = false;
+    }
+  }
 }
 
 /// Private methods
@@ -918,15 +1020,13 @@ extension _$Chat on _Chat {
     P.see.audioFileStreamController.stream.listen(_onNewFileReceived);
     focusNode.addListener(_onFocusNodeChanged);
     hasFocus.q = focusNode.hasFocus;
-    P.suggestion.loadSuggestions();
-
     P.app.lifecycleState.lb(_onLifecycleStateChanged);
-
-    P.preference.preferredLanguage.lv(P.suggestion.loadSuggestions);
 
     P.rwkv.supportedBatchSizes.l(_onSupportedBatchSizesChanged);
 
     batchCount.l(_onBatchCountChanged);
+    batchVW.l(_onBatchVWChanged);
+    _loadBatchVW();
 
     scrollController.addListener(_onScroll);
     P.msg.ids.l(_onMessageIdsChangedForTokenCount);
@@ -948,7 +1048,9 @@ extension _$Chat on _Chat {
     required int? conversationTokensCount,
   }) {
     if (conversationTokensCount == null) return;
-    if (conversationTokensCount < Config.newConversationTokenReminderThreshold) return;
+    final int effectiveBatchCount = batchEnabled.q ? batchCount.q : 1;
+    final int threshold = Config.newConversationTokenReminderThreshold * effectiveBatchCount;
+    if (conversationTokensCount < threshold) return;
 
     final conversationId = P.msg.msgNode.q.createAtInUS;
     final shownConversationIds = tokenReminderShownConversationIds.q;
@@ -986,6 +1088,17 @@ extension _$Chat on _Chat {
       ),
     );
     P.rwkv.send(to_rwkv.GetSamplerAndPenaltyParams(batchSize: value, modelID: modelID));
+  }
+
+  void _onBatchVWChanged(int value) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt("halo_state.batchVW", value);
+  }
+
+  void _loadBatchVW() async {
+    final sp = await SharedPreferences.getInstance();
+    final saved = sp.getInt("halo_state.batchVW");
+    if (saved != null) batchVW.q = saved;
   }
 
   void _onSupportedBatchSizesChanged(List<int> supportedBatchSizes) {

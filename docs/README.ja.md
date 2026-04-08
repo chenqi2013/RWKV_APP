@@ -1,34 +1,41 @@
 # RWKV App ✨
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![English](https://img.shields.io/badge/README-English-blue.svg)](./README.md)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../LICENSE)
+[![English](https://img.shields.io/badge/README-English-blue.svg)](../README.md)
 [![Simplified Chinese](https://img.shields.io/badge/README-简体中文-blue.svg)](./README.zh-hans.md)
 [![Traditional Chinese](https://img.shields.io/badge/README-繁體中文-blue.svg)](./README.zh-hant.md)
-[![Japanese](https://img.shields.io/badge/README-日本語-blue.svg)](./README.ja.md)
 [![Korean](https://img.shields.io/badge/README-한국어-blue.svg)](./README.ko.md)
 [![Russian](https://img.shields.io/badge/README-Русский-blue.svg)](./README.ru.md)
 
-**RWKV App を使って、エッジデバイス上で大規模言語モデル（LLM）をオフラインで探索・体験しましょう。**
-**プライバシー重視で、日常のデバイス向けに完全オンデバイスで動く LLM 体験。**
+**スマートフォンとデスクトップで、プライベートなオンデバイス AI を動かす。**
+**チャット、音声、視覚、モデル検証のためのローカルファーストな AI プレイグラウンド。**
 
-RWKV App は、Android/iOS デバイスに大規模言語モデル（LLM）を直接導入する実験的なアプリケーションです。さまざまなモデルを試したり、チャットを楽しんだり、音声を生成したり、視覚理解を行ったりすることができます！すべての計算はローカルで行われ、モデルのロード後はインターネット接続は必要ありません。
+RWKV App は、Android、iOS、Windows、macOS、Linux 向けのプライバシー重視 AI アプリです。ローカルモデルを実機でダウンロード・切り替え・比較し、クラウドに依存せず AI 体験を試作できます。モデルを読み込んだ後の推論はデバイス上に留まります。
 
-**概要**
+## なぜ RWKV App なのか
 
-RWKV App は、マルチターン会話、テキスト読み上げ（TTS）、視覚理解、その他さまざまなタスクをサポートしています。
+- **実機のエッジデバイス向け：** クラウド中心のデモではなく、スマートフォンやデスクトップ上でローカルモデルを評価できます。
+- **1つのアプリで複数の AI ワークフロー：** チャット、テキスト読み上げ、視覚理解をまとめて扱えます。
+- **モデル比較が速い：** Hugging Face からモデルをダウンロードして切り替え、品質・速度・ハードウェア適性を見比べられます。
+- **プライバシー重視：** モデル読み込み後のプロンプト、出力、推論はデバイス内に留まります。
 
-![RWKV App Screenshot](.github/images/readme/gallery.png)
+![RWKV App Screenshot](../.github/images/readme/gallery.png)
 
 ## ✨ 主な機能
 
-- **📱 ローカルで実行、完全オフライン:** インターネット接続なしで生成 AI の魔法を体験できます。すべての処理はデバイス上で直接行われます。
-- **🤖 モデルを自由に切り替え:** Hugging Face からさまざまなモデルを簡単にダウンロードして切り替え、パフォーマンスを比較できます。
-- **💬 AI チャット:** 流暢なマルチターン会話を楽しめます。
+- **📱 クロスプラットフォーム、ローカルファースト:** Android、iOS、Windows、macOS、Linux でオンデバイス推論を実行できます。
+- **🤖 柔軟なモデル切り替え:** Hugging Face からさまざまなモデルをダウンロードして比較できます。
+- **💬 AI チャット:** 実機上で自然なマルチターン会話を試せます。
 - **🔊 テキスト読み上げ (TTS):** テキストを自然な音声に変換します。
 - **🖼️ 視覚理解:** 画像ベースの AI ユースケースを探索できます。
-- **🌓 ダークモード:** さまざまな照明条件下でも快適に使用できるようサポートします。
+- **🔌 任意のローカル API アクセス:** デスクトップでは、ツール連携や実験向けに OpenAI 互換のローカルエンドポイントを公開できます。
+- **🌓 ダークモード:** 長時間の利用でも快適に使えます。
 
-## 🧭 ダウンロードと体験
+## 🚀 クイックスタート
+
+1. 公式ダウンロードページ、または以下のプラットフォーム別リンクから RWKV App を入手します。
+2. アプリを開き、デバイスに合ったチャットモデルを読み込みます。
+3. チャット、音声、視覚のワークフローを試します。デスクトップでは、必要に応じて内蔵のローカル API エンドポイントも有効化できます。
 
 ### ダウンロード
 
@@ -84,14 +91,14 @@ RWKV App は、マルチターン会話、テキスト読み上げ（TTS）、�
 > [!NOTE]
 > 将来的には、すべての機能を RWKV Chat アプリに統合し、統一された体験を提供する予定です。
 
-### 使い方
+### 初回起動
 
 アプリを初めて開くと、モデル選択パネルが表示されます。ニーズに合わせて使用したいモデルの重みを選択してください。
 
 > [!WARNING]
 > iPhone 14 より古いデバイスでは、1.5B / 2.9B パラメータのモデルをスムーズに実行できない場合があります。
 
-## 💻 開発
+## 💻 ソースからビルド
 
 **[Flutter](https://flutter.dev/)開発環境がセットアップされていることを確認してください。**
 
@@ -105,6 +112,14 @@ git clone -b dev https://github.com/MollySophia/rwkv_mobile_flutter.git
 # rwkv_mobile_flutter と RWKV_APP が同じディレクトリにあることを確認してください
 git clone -b dev https://github.com/RWKV-APP/RWKV_APP.git
 cd RWKV_APP
+```
+
+ディレクトリ構成は次のようになります。
+
+```text
+parent/
+├─ rwkv_mobile_flutter/
+└─ RWKV_APP/
 ```
 
 2. **必要な設定ファイルを作成:**
@@ -144,20 +159,12 @@ Windows ARM64 でデバッグする場合は、`pubspec.yaml` の次の設定を
 
 Windows ARM64 でデバッグする場合は、Flutter の `stable` ブランチではなく `master` ブランチを使用してください。
 
-## 🛠️ 技術的ハイライト
+## 🏗️ スタック
 
 - **Flutter:** Android、iOS、Windows、macOS をサポートする、クロスプラットフォームのユーザーインターフェースを構築するためのオープンソースフレームワーク。
 - **Dart FFI (Foreign Function Interface):** Dart と C++ 推論エンジン間の効率的な通信に使用されます。
 - **C++ 推論エンジン:** デバイス上の推論エンジンのコアで、C++ で構築されており、複数のモデル形式とハードウェアアクセラレーション（CPU/GPU/NPU）をサポートしています。
 - **Hugging Face:** モデル、データセット、ツールを提供するオープンソースコミュニティ。ここではモデルの重みのソースとして使用されています。
-
-## 🗺️ ロードマップ
-
-- [x] すべての機能を RWKV Chat アプリに統合する
-- [ ] より多くのモデルの重みをサポートする
-- [ ] より多くのハードウェアをサポートする
-- [ ] より多くのオペレーティングシステムをサポートする
-- [ ] より多くのデバイス（時計、VR グラスなど）をサポートする
 
 ## 🤝 フィードバックと貢献
 
@@ -165,11 +172,11 @@ Windows ARM64 でデバッグする場合は、Flutter の `stable` ブランチ
 
 - 🐞 **バグや問題を見つけましたか？** [ここで報告してください！](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D)
 - 💡 **提案がありますか？** [機能を提案してください！](https://github.com/RWKV-APP/RWKV_APP/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)
-- 🎨 **カスタムテーマを貢献したいですか？** [Theme クイックスタート](CONTRIBUTING.ja.md)
+- 🎨 **カスタムテーマを貢献したいですか？** [Theme クイックスタート](./CONTRIBUTING.ja.md)
 
 ## 📄 ライセンス
 
-このプロジェクトは Apache License 2.0 の下でライセンスされています。詳細については [LICENSE](LICENSE) ファイルを参照してください。
+このプロジェクトは Apache License 2.0 の下でライセンスされています。詳細については [LICENSE](../LICENSE) ファイルを参照してください。
 
 ## 🔗 関連リンク
 

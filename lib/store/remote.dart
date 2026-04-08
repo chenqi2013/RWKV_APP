@@ -2,6 +2,8 @@
 
 part of 'p.dart';
 
+const _modelsDirNotReadyMessage = "Models directory is not ready";
+
 /// 1. 管理通过 latest.json 配置的文件
 class _Remote {
   // ===========================================================================
@@ -38,7 +40,12 @@ class _Remote {
     final effectiveDocumentsDir = ref.watch(P.app.effectiveDocumentsDir);
     final isDesktop = ref.watch(P.app.isDesktop);
 
-    if (isDesktop) return join(effectiveModelsDir, key.fileName);
+    if (isDesktop) {
+      if (effectiveModelsDir.isEmpty) {
+        return "";
+      }
+      return join(effectiveModelsDir, key.fileName);
+    }
 
     final fileName = key.fileName;
     final dirPath = effectiveDocumentsDir!.path;
@@ -117,6 +124,15 @@ class _Remote {
   /// 默认的存放已量化权重的文件夹路径
   late final defaultModelsDir = qp<String>((ref) {
     if (Platform.isWindows) {
+      if (Args.useWindowsSandboxModels) {
+        final appSupportDir = ref.watch(P.app.effectiveDocumentsDir);
+        if (appSupportDir == null) {
+          qqw("Windows sandbox models dir is not ready yet");
+          return "";
+        }
+        final res = join(appSupportDir.path, Config.desktopModelsDirName);
+        return res;
+      }
       final exePath = Platform.resolvedExecutable;
       final exeDir = dirname(exePath);
       final res = join(exeDir, Config.desktopModelsDirName);
@@ -201,10 +217,23 @@ class _Remote {
 
 /// Public methods
 extension $Remote on _Remote {
+  String? _getReadyModelsDirPath({bool showAlert = false}) {
+    final modelsDir = effectiveModelsDir.q;
+    if (modelsDir.isNotEmpty) {
+      return modelsDir;
+    }
+
+    qqw(_modelsDirNotReadyMessage);
+    if (showAlert) {
+      Alert.error(_modelsDirNotReadyMessage);
+    }
+    return null;
+  }
+
   Future<String?> _getModelsDirPathForScan() async {
     final isDesktop = P.app.isDesktop.q;
     if (isDesktop) {
-      return P.remote.effectiveModelsDir.q;
+      return _getReadyModelsDirPath();
     }
 
     final documentsDir = P.app.documentsDir.q?.path;
@@ -269,6 +298,7 @@ extension $Remote on _Remote {
   /// 如果尺寸对不上, 自动删除
   Future<void> checkLocal() async {
     await 17.msLater;
+    final readyModelsDir = _getReadyModelsDirPath();
     final fileInfos = [
       chatWeights.q,
       roleplayWeights.q,
@@ -279,7 +309,17 @@ extension $Remote on _Remote {
     ].expand((e) => e).where((e) => e.available).toList();
 
     for (final fileInfo in fileInfos) {
+      final local = locals(fileInfo);
       final path = _paths(fileInfo).q;
+      if (path.isEmpty) {
+        local.q = local.q.copyWith(
+          hasFile: false,
+          progress: 0,
+          state: TaskState.idle,
+        );
+        continue;
+      }
+
       final pathExists = await File(path).exists();
       bool fileSizeVerified = false;
       if (pathExists) {
@@ -300,11 +340,15 @@ extension $Remote on _Remote {
 
         if (shouldDelete) File(path).delete();
       }
-      final local = locals(fileInfo);
       local.q = local.q.copyWith(hasFile: fileSizeVerified);
     }
     await _initModelDownloadTaskState();
-    final totalSize = await calculateTotalSizeOfDir(effectiveModelsDir.q);
+    if (readyModelsDir == null) {
+      totalSizeInModelsDir.q = 0;
+      return;
+    }
+
+    final totalSize = await calculateTotalSizeOfDir(readyModelsDir);
     totalSizeInModelsDir.q = totalSize;
   }
 
@@ -372,6 +416,10 @@ extension $Remote on _Remote {
   Future<void> getFile({required FileInfo fileInfo}) async {
     final url = downloadSource.q.prefix + fileInfo.raw + downloadSource.q.suffix;
     final path = _paths(fileInfo).q;
+    if (path.isEmpty) {
+      Alert.error(_modelsDirNotReadyMessage);
+      return;
+    }
 
     qqq('start download file: \n>>url:$url\n>>path:$path');
 
@@ -391,7 +439,9 @@ extension $Remote on _Remote {
         .throttleTime(const Duration(milliseconds: 1000), trailing: true, leading: false)
         .listen(
           (e) {
-            qqq('download update: state:${e.state}, speed:${e.speedInMB.toStringAsFixed(2)}MB/s, ${e.totalSize}');
+            if (HF.randomBool(truePercentage: .2)) {
+              qqq('download update: state:${e.state}, speed:${e.speedInMB.toStringAsFixed(2)}MB/s, ${e.totalSize}');
+            }
             state.q = state.q.copyWith(
               timeRemaining: Duration(seconds: e.remainSeconds.round().clamp(0, 60 * 60 * 24)),
               progress: e.progress,
@@ -462,6 +512,10 @@ extension $Remote on _Remote {
       if (!kDebugMode) Sentry.captureException(e, stackTrace: StackTrace.current);
     }
     final path = _paths(fileInfo).q;
+    if (path.isEmpty) {
+      state.q = value.copyWith(hasFile: false, state: TaskState.idle, progress: 0);
+      return;
+    }
     await File(path).delete();
     state.q = value.copyWith(hasFile: false, state: TaskState.idle, progress: 0);
 
@@ -477,7 +531,10 @@ extension $Remote on _Remote {
     }
 
     try {
-      final effectiveDir = P.remote.effectiveModelsDir.q;
+      final effectiveDir = _getReadyModelsDirPath(showAlert: true);
+      if (effectiveDir == null) {
+        return;
+      }
       await openFolder(effectiveDir);
     } catch (e) {
       qqe(e);
@@ -492,7 +549,7 @@ extension $Remote on _Remote {
   /// Only updates preference path; does not migrate files. Use [Alert.info] to prompt manual migration.
   Future<bool> pickAndSetCustomModelsDir({required BuildContext context}) async {
     try {
-      final selectedDir = await file_picker.FilePicker.platform.getDirectoryPath();
+      final selectedDir = await file_picker.FilePicker.getDirectoryPath();
       if (selectedDir == null) {
         return false; // User cancelled
       }
@@ -660,6 +717,9 @@ extension $Remote on _Remote {
 
       // Check if target file already exists
       final targetPath = _paths(matchingFileInfo).q;
+      if (targetPath.isEmpty) {
+        return null;
+      }
       final targetFile = File(targetPath);
       if (await targetFile.exists()) {
         return matchingFileInfo;
@@ -729,6 +789,9 @@ extension $Remote on _Remote {
 
     // Get the target path
     final targetPath = _paths(matchingFileInfo).q;
+    if (targetPath.isEmpty) {
+      throw Exception(_modelsDirNotReadyMessage);
+    }
     final targetFile = File(targetPath);
 
     // Check if target file already exists
@@ -811,6 +874,10 @@ extension $Remote on _Remote {
   }) async {
     qq;
 
+    if (P.app.isDesktop.q && _getReadyModelsDirPath() == null) {
+      throw Exception(_modelsDirNotReadyMessage);
+    }
+
     // Read and decode ZIP file
     final zipBytes = await zipFile.readAsBytes();
     final archive = ZipDecoder().decodeBytes(zipBytes);
@@ -873,6 +940,10 @@ extension $Remote on _Remote {
 
         // Get target path
         final targetPath = _paths(matchingFileInfo).q;
+        if (targetPath.isEmpty) {
+          completed++;
+          continue;
+        }
         final targetFile = File(targetPath);
 
         // Delete existing file if it exists (overwrite)
@@ -945,6 +1016,9 @@ extension $Remote on _Remote {
     qq;
 
     final sourcePath = _paths(fileInfo).q;
+    if (sourcePath.isEmpty) {
+      throw Exception(_modelsDirNotReadyMessage);
+    }
     final sourceFile = File(sourcePath);
 
     if (!await sourceFile.exists()) {
@@ -1046,6 +1120,10 @@ extension $Remote on _Remote {
   }) async {
     qq;
 
+    if (P.app.isDesktop.q && _getReadyModelsDirPath() == null) {
+      throw Exception(_modelsDirNotReadyMessage);
+    }
+
     // Get all weight files that exist locally
     final allWeights = [
       ...chatWeights.q,
@@ -1107,6 +1185,10 @@ extension $Remote on _Remote {
 
         try {
           final sourcePath = _paths(fileInfo).q;
+          if (sourcePath.isEmpty) {
+            completed++;
+            continue;
+          }
           final sourceFile = File(sourcePath);
 
           if (!await sourceFile.exists()) {
@@ -1186,7 +1268,7 @@ extension $Remote on _Remote {
     qq;
 
     // Pick files
-    final result = await file_picker.FilePicker.platform.pickFiles(
+    final result = await file_picker.FilePicker.pickFiles(
       type: file_picker.FileType.custom,
       allowMultiple: true,
       allowedExtensions: ['st', 'gguf', 'prefab', 'bin', 'rmpack', 'mnn', 'zip'],
@@ -1410,7 +1492,7 @@ extension $Remote on _Remote {
     }
 
     // Select target directory
-    final targetDirectory = await file_picker.FilePicker.platform.getDirectoryPath();
+    final targetDirectory = await file_picker.FilePicker.getDirectoryPath();
     if (targetDirectory == null) {
       return false; // User cancelled
     }
@@ -1438,7 +1520,7 @@ extension $Remote on _Remote {
     qq;
 
     // Select target directory
-    final targetDirectory = await file_picker.FilePicker.platform.getDirectoryPath();
+    final targetDirectory = await file_picker.FilePicker.getDirectoryPath();
     if (targetDirectory == null) {
       return false; // User cancelled
     }
@@ -1678,7 +1760,7 @@ extension $Remote on _Remote {
         initialDirectory = downloadsDir.path;
       }
     } catch (_) {}
-    final result = await file_picker.FilePicker.platform.pickFiles(
+    final result = await file_picker.FilePicker.pickFiles(
       type: file_picker.FileType.custom,
       allowedExtensions: ['pth'],
       initialDirectory: initialDirectory,
@@ -1721,7 +1803,13 @@ extension $Remote on _Remote {
       refreshUnrecognizedFiles(),
       refreshMlxCacheDirectories(),
     ]);
-    await calculateTotalSizeOfDir(effectiveModelsDir.q);
+    final readyModelsDir = _getReadyModelsDirPath();
+    if (readyModelsDir == null) {
+      totalSizeInModelsDir.q = 0;
+      syncingLocalFiles.q = false;
+      return;
+    }
+    await calculateTotalSizeOfDir(readyModelsDir);
     syncingLocalFiles.q = false;
   }
 }
@@ -1963,15 +2051,19 @@ extension _$Remote on _Remote {
 
     for (final fileInfo in availableFiles) {
       final taskId = fileInfo.fileName;
+      final fileState = locals(fileInfo);
 
       if (_downloadTasks.containsKey(taskId)) {
         continue;
       }
       final path = _paths(fileInfo).q;
+      if (path.isEmpty) {
+        fileState.q = fileState.q.copyWith(state: TaskState.idle, hasFile: false);
+        continue;
+      }
       final url = fileInfo.raw.startsWith("http://") || fileInfo.raw.startsWith("https://")
           ? fileInfo.raw
           : sprintf(urlFmt, [fileInfo.raw]);
-      final fileState = locals(fileInfo);
       try {
         final task = await DownloadTask.create(
           url: url,

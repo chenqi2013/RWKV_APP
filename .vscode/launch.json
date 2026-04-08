@@ -18,8 +18,9 @@
       "program": "lib/main.dart",
       "flutterMode": "debug",
       "args": [
+        //
         // "--dart-define=autoShowTranslator=true",
-        // "--dart-define=logLevel=3",
+        "--dart-define=logLevel=3"
         // "--dart-define=enableBatchInference=true",
         // "--dart-define=batchCount=3",
         // "--dart-define=batchVW=50",
@@ -27,14 +28,16 @@
         // "--dart-define=debuggingThemes=truefalse,
         // "--dart-define=disableAutoShowOfWeightsPanel=true",
         // "--dart-define=maxTokens=200",
-        "--dart-define=disableRemoteConfig=true"
-        // "--dart-define=showHaloDebugger=true",
+        // "--dart-define=disableRemoteConfig=true",
+        // "--dart-define=showHaloDebugger=true"
         // "--dart-define=conversationTokenReminderThreshold=1000"
         // "--dart-define=autoPushTestPage=true",
         // "--dart-define=domain=http://localhost:3462"
         // "--dart-define=debuggingLatestUI"
         // "--dart-define=forceShowNewVersionPanel=true"
-        // "--dart-define=testingSeeQueue=true"
+        // "--dart-define=testingSeeQueue=true",
+        // "--dart-define=useWindowsSandboxModels=true",
+        // "--dart-define=distributionChannel=windowsStore"
       ]
     },
     {
@@ -45,12 +48,25 @@
       "flutterMode": "debug",
       "args": [
         //
+        // "--dart-define=autoShowTranslator=true",
         "--dart-define=logLevel=3",
-        "--dart-define=showHaloDebugger=true",
-        // "--dart-define=debuggingLatestUI",
+        "--dart-define=enableBatchInference=true",
+        "--dart-define=batchCount=3",
+        // "--dart-define=batchVW=50",
+        // "--dart-define=debugMsgId=true",
+        // "--dart-define=debuggingThemes=truefalse,
+        // "--dart-define=disableAutoShowOfWeightsPanel=true",
+        // "--dart-define=maxTokens=200",
         "--dart-define=disableRemoteConfig=true",
         "--dart-define=showHaloDebugger=true"
-        // "--dart-define=disableRemoteConfig=true"
+        // "--dart-define=conversationTokenReminderThreshold=1000"
+        // "--dart-define=autoPushTestPage=true",
+        // "--dart-define=domain=http://localhost:3462"
+        // "--dart-define=debuggingLatestUI"
+        // "--dart-define=forceShowNewVersionPanel=true"
+        // "--dart-define=testingSeeQueue=true",
+        // "--dart-define=useWindowsSandboxModels=true",
+        // "--dart-define=distributionChannel=windowsStore"
       ],
       "deviceId": "90313e34"
     },
@@ -62,12 +78,25 @@
       "flutterMode": "debug",
       "args": [
         //
+        // "--dart-define=autoShowTranslator=true",
         "--dart-define=logLevel=3",
-        "--dart-define=showHaloDebugger=true",
-        // "--dart-define=debuggingLatestUI",
-        // "--dart-define=disableRemoteConfig=true",
+        "--dart-define=enableBatchInference=true",
+        "--dart-define=batchCount=3",
+        // "--dart-define=batchVW=50",
+        // "--dart-define=debugMsgId=true",
+        // "--dart-define=debuggingThemes=truefalse,
+        // "--dart-define=disableAutoShowOfWeightsPanel=true",
+        // "--dart-define=maxTokens=200",
+        "--dart-define=disableRemoteConfig=true",
         "--dart-define=showHaloDebugger=true"
-        // "--dart-define=disableRemoteConfig=true"
+        // "--dart-define=conversationTokenReminderThreshold=1000"
+        // "--dart-define=autoPushTestPage=true",
+        // "--dart-define=domain=http://localhost:3462"
+        // "--dart-define=debuggingLatestUI"
+        // "--dart-define=forceShowNewVersionPanel=true"
+        // "--dart-define=testingSeeQueue=true",
+        // "--dart-define=useWindowsSandboxModels=true",
+        // "--dart-define=distributionChannel=windowsStore"
       ],
       "deviceId": "00008150-000C14810242401C"
     },
@@ -79,12 +108,25 @@
       "flutterMode": "debug",
       "args": [
         //
+        // "--dart-define=autoShowTranslator=true",
         "--dart-define=logLevel=3",
-        "--dart-define=showHaloDebugger=true",
-        // "--dart-define=debuggingLatestUI",
+        "--dart-define=enableBatchInference=true",
+        "--dart-define=batchCount=3",
+        // "--dart-define=batchVW=50",
+        // "--dart-define=debugMsgId=true",
+        // "--dart-define=debuggingThemes=truefalse,
+        // "--dart-define=disableAutoShowOfWeightsPanel=true",
+        // "--dart-define=maxTokens=200",
         "--dart-define=disableRemoteConfig=true",
         "--dart-define=showHaloDebugger=true"
-        // "--dart-define=disableRemoteConfig=true"
+        // "--dart-define=conversationTokenReminderThreshold=1000"
+        // "--dart-define=autoPushTestPage=true",
+        // "--dart-define=domain=http://localhost:3462"
+        // "--dart-define=debuggingLatestUI"
+        // "--dart-define=forceShowNewVersionPanel=true"
+        // "--dart-define=testingSeeQueue=true",
+        // "--dart-define=useWindowsSandboxModels=true",
+        // "--dart-define=distributionChannel=windowsStore"
       ],
       "deviceId": "macos"
     },
@@ -120,8 +162,8 @@
       "configurations": [
         // 同时启动, 方便同时 debug 多个平台
         "debug (halo) - macOS",
-        "debug (halo) - Android",
-        "debug (halo) - iOS"
+        "debug (halo) - Android"
+        // "debug (halo) - iOS"
       ]
     }
   ]

@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 // Package imports:
 import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_roleplay/models/model_info.dart' show ModelInfo;
-import 'package:flutter_roleplay/services/role_play_manage.dart' show RoleplayManage, RoleplayManageModelType;
+import 'package:flutter_roleplay/models/model_info.dart';
+import 'package:flutter_roleplay/services/role_play_manage.dart';
 import 'package:halo/halo.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:rwkv_downloader/downloader.dart';
 
 // Project imports:
-import 'package:zone/gen/l10n.dart' show S;
+import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/file_info.dart';
-import 'package:zone/store/p.dart' show $RWKVLoad, $Remote, P;
+import 'package:zone/store/p.dart';
 import 'package:zone/widgets/model_item.dart';
 
 ModelInfo? rolePlayCurrentModel;
@@ -46,11 +46,17 @@ class _RolePlayItemState extends ConsumerState<RolePlayItem> {
     setState(() {
       currentStateFile = state;
     });
+    final file = widget.file;
+
+    if (P.remote.modelSelectorShown.q) {
+      Navigator.pop(context);
+    }
+
     final info = ModelInfo(
-      id: widget.file.fileName,
-      modelPath: P.remote.locals(widget.file).q.targetPath,
+      id: file.fileName,
+      modelPath: P.remote.locals(file).q.targetPath,
       statePath: state == null ? '' : P.remote.locals(state).q.targetPath,
-      backend: widget.file.backend!,
+      backend: file.backend!,
       topP: state?.decodeParam['topP'],
       temperature: state?.decodeParam['temperature']?.toDouble(),
       penaltyDecay: state?.decodeParam['penaltyDecay']?.toDouble(),
@@ -58,12 +64,8 @@ class _RolePlayItemState extends ConsumerState<RolePlayItem> {
       frequencyPenalty: state?.decodeParam['frequencyPenalty']?.toDouble(),
       modelType: RoleplayManageModelType.chat,
     );
-    final sp = await P.rwkv.loadChat(fileInfo: widget.file);
+    final sp = await P.rwkv.loadChat(fileInfo: file);
     RoleplayManage.onModelDownloadComplete(info, [sp.$1, sp.$2], P.rwkv.receivePort);
-    if (!mounted) {
-      return;
-    }
-    Navigator.pop(context);
   }
 
   @override

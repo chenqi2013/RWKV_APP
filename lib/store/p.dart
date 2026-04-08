@@ -1,7 +1,7 @@
 // Dart imports:
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi' show Abi;
+import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
@@ -21,7 +21,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_roleplay/services/role_play_manage.dart' show RoleplayManage;
+import 'package:flutter_roleplay/services/role_play_manage.dart';
 import 'package:gaimon/gaimon.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:halo/halo.dart';
@@ -32,7 +32,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:macos_secure_bookmarks/macos_secure_bookmarks.dart';
 import 'package:mp_audio_stream/mp_audio_stream.dart' as mp_audio_stream;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path/path.dart' show basename, dirname, join, basenameWithoutExtension;
+import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart' as ar;
@@ -47,7 +47,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf_ws;
-import 'package:sprintf/sprintf.dart' show sprintf;
+import 'package:sprintf/sprintf.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 import 'package:system_info2/system_info2.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -148,6 +148,8 @@ part "md_render.dart";
 part "font.dart";
 part "ui.dart";
 part "pth.dart";
+part "api_server.dart";
+part "multi_question.dart";
 
 abstract class P {
   static final adapter = _Adapter();
@@ -175,6 +177,8 @@ abstract class P {
   static final mdRender = _MDRender();
   static final font = _Font();
   static final ui = _UI();
+  static final apiServer = _ApiServer();
+  static final multiQuestion = _MultiQuestion();
 
   static Future<void> init() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -220,6 +224,7 @@ abstract class P {
       _safeInit(() => font._init(), mark: "font"),
       _safeInit(() => ui._init(), mark: "ui"),
       _safeInit(() => pth._init(), mark: "pth"),
+      _safeInit(() => apiServer._init(), mark: "apiServer"),
     ]);
   }
 

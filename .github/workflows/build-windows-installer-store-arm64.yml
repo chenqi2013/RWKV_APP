@@ -1,0 +1,289 @@
+name: Windows Installer Store arm64
+
+run-name: ${{ github.ref_name }} Windows Installer Store arm64
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to publish installer assets to (e.g. 4.0.6). Leave empty to skip release/upload."
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      build_number: ${{ steps.meta.outputs.build_number }}
+      installer_name: ${{ steps.meta.outputs.installer_name }}
+      should_publish: ${{ steps.meta.outputs.should_publish }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: pubspec.yaml
+          sparse-checkout-cone-mode: false
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          VERSION_LINE=$(grep "^version:" pubspec.yaml)
+          VERSION=$(echo "$VERSION_LINE" | sed 's/version: //' | sed 's/+.*//')
+          BUILD_NUMBER=$(echo "$VERSION_LINE" | sed 's/.*+//')
+          if [ -z "$BUILD_NUMBER" ]; then BUILD_NUMBER="1"; fi
+
+          INSTALLER_NAME="rwkv_chat_${VERSION}_${BUILD_NUMBER}_windows-arm64-store-sandbox-setup"
+
+          if [[ "${{ inputs.release_tag }}" != "" ]]; then
+            SHOULD_PUBLISH="true"
+          else
+            SHOULD_PUBLISH="false"
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "installer_name=$INSTALLER_NAME" >> $GITHUB_OUTPUT
+          echo "should_publish=$SHOULD_PUBLISH" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build
+    needs: setup
+    runs-on: windows-11-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout rwkv_mobile_flutter dependency
+        uses: actions/checkout@v4
+        with:
+          repository: MollySophia/rwkv_mobile_flutter
+          ref: dev
+          path: rwkv_mobile_flutter
+          fetch-depth: 1
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "0f401eea04390dc08eb939b6c0fee17c7d15f6ec"
+          channel: "master"
+          cache: true
+          cache-path: 'C:/f'
+
+      - name: Override dependency path
+        run: |
+          echo "dependency_overrides:" > pubspec_overrides.yaml
+          echo "  rwkv_mobile_flutter:" >> pubspec_overrides.yaml
+          echo "    path: ./rwkv_mobile_flutter" >> pubspec_overrides.yaml
+
+      - name: Create .env file
+        uses: ./.github/actions/create-env-windows
+        with:
+          x_api_key: ${{ secrets.X_API_KEY }}
+
+      - name: Decrypt sensitive assets
+        uses: ./.github/actions/decrypt-assets-windows
+        with:
+          filter_decrypt_pass: ${{ secrets.FILTER_DECRYPT_PASS }}
+
+      - name: Enable QNN Windows assets (arm64)
+        shell: pwsh
+        run: |
+          $pubspecPath = "pubspec.yaml"
+          $content = Get-Content -Path $pubspecPath -Raw
+
+          $content = $content -replace '(?m)^(\s*)#\s*-\s*path:\s*assets/lib/qnn-windows/\s*$', '$1- path: assets/lib/qnn-windows/'
+          $content = $content -replace '(?m)^(\s*)#\s*platforms:\s*\[windows\]\s*$', '$1  platforms: [windows]'
+
+          Set-Content -Path $pubspecPath -Value $content -Encoding UTF8
+
+          if (-not ($content -match '(?m)^\s*-\s*path:\s*assets/lib/qnn-windows/\s*$')) {
+            throw "Failed to enable assets/lib/qnn-windows in pubspec.yaml"
+          }
+          if (-not ($content -match '(?m)^\s*platforms:\s*\[windows\]\s*$')) {
+            throw "Failed to enable windows platform mapping for qnn-windows in pubspec.yaml"
+          }
+
+          Write-Host "Enabled windows-arm64 QNN assets in pubspec.yaml"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows arm64
+        run: flutter build windows --dart-define=useWindowsSandboxModels=true --dart-define=distributionChannel=windowsStore
+
+      - name: Verify QNN Windows assets in build output
+        shell: pwsh
+        run: |
+          $assetsRoot = "build\windows\arm64\runner\Release\data\flutter_assets\assets\lib"
+          $qnnWindowsDir = Join-Path $assetsRoot "qnn-windows"
+          $qnnAndroidDir = Join-Path $assetsRoot "qnn"
+
+          if (-not (Test-Path $qnnWindowsDir)) {
+            throw "Expected qnn-windows assets are missing from build output: $qnnWindowsDir"
+          }
+
+          $qnnWindowsFiles = Get-ChildItem -Path $qnnWindowsDir -File -ErrorAction Stop
+          if ($qnnWindowsFiles.Count -eq 0) {
+            throw "qnn-windows directory exists but contains no files: $qnnWindowsDir"
+          }
+
+          if (Test-Path $qnnAndroidDir) {
+            throw "Unexpected Android qnn assets found in Windows arm64 build: $qnnAndroidDir"
+          }
+
+          Write-Host "QNN Windows assets verification passed"
+
+      - name: Remove x64 DLLs
+        shell: pwsh
+        run: |
+          $sourceDir = "build\windows\arm64\runner\Release"
+          if (Test-Path $sourceDir) {
+            $filesToRemove = @(
+              "*x64*.dll",
+              "rwkv_mobile-x64.dll"
+            )
+            $removedCount = 0
+            foreach ($pattern in $filesToRemove) {
+              $files = Get-ChildItem -Path $sourceDir -Filter $pattern -ErrorAction SilentlyContinue
+              foreach ($file in $files) {
+                Remove-Item -Path $file.FullName -Force
+                Write-Host "Removed: $($file.Name)"
+                $removedCount++
+              }
+            }
+            Write-Host "Removed $removedCount x64 DLL file(s)"
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes
+
+      - name: Create store installer
+        id: create-installer
+        shell: pwsh
+        env:
+          INSTALLER_NAME: ${{ needs.setup.outputs.installer_name }}
+        run: |
+          $installerName = $env:INSTALLER_NAME
+          $installerFilename = "$installerName.exe"
+          $version = "${{ needs.setup.outputs.version }}"
+          $sourceDir = "build\windows\arm64\runner\Release"
+          $outputDir = "build\windows\installer-store-arm64"
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+
+          $issContent = @"
+          [Setup]
+          AppId={{B8263530-8329-4360-844C-964687593675}
+          AppName=RWKV Chat
+          AppVersion=$version
+          AppPublisher=RWKV Community
+          DefaultDirName={localappdata}\RWKV Chat
+          DisableProgramGroupPage=yes
+          PrivilegesRequired=lowest
+          OutputDir=$outputDir
+          OutputBaseFilename=$installerName
+          Compression=lzma
+          SolidCompression=yes
+          ArchitecturesAllowed=arm64
+          ArchitecturesInstallIn64BitMode=arm64
+
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+
+          [Tasks]
+          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+          [Files]
+          Source: "$sourceDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{autoprograms}\RWKV Chat"; Filename: "{app}\RWKV_Chat.exe"
+          Name: "{autodesktop}\RWKV Chat"; Filename: "{app}\RWKV_Chat.exe"; Tasks: desktopicon
+
+          [Run]
+          Filename: "{app}\RWKV_Chat.exe"; Description: "{cm:LaunchProgram,RWKV Chat}"; Flags: nowait postinstall skipifsilent runascurrentuser
+          "@
+
+          $issContent | Out-File -FilePath "setup-store-arm64.iss" -Encoding ASCII
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup-store-arm64.iss
+
+          $installerPath = Join-Path $outputDir $installerFilename
+          if (Test-Path $installerPath) {
+            echo "installer_path=$installerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else { exit 1 }
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-store-arm64
+          path: ${{ steps.create-installer.outputs.installer_path }}
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [setup, build]
+    if: needs.setup.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-store-arm64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+          files: "*.exe"
+
+  upload-hf:
+    name: Upload to HuggingFace
+    needs: [setup, build]
+    if: needs.setup.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout upload script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/upload_to_hf.py
+          sparse-checkout-cone-mode: false
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-store-arm64
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          check-latest: true
+
+      - name: Install dependencies
+        run: pip install huggingface_hub
+
+      - name: Upload to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_ENDPOINT: ${{ secrets.HF_ENDPOINT || 'https://huggingface.co' }}
+          HF_DATASETS_ID: ${{ secrets.HF_DATASETS_ID || 'HaloWang/rwkv-chat' }}
+          INSTALLER_NAME: ${{ needs.setup.outputs.installer_name }}
+        run: |
+          python scripts/upload_to_hf.py \
+            --repo-id "$HF_DATASETS_ID" \
+            --file "${INSTALLER_NAME}.exe" \
+            --path-in-repo "windows-arm64-installer-store/${INSTALLER_NAME}.exe" \
+            --hf-token "$HF_TOKEN" \
+            --hf-endpoint "$HF_ENDPOINT"

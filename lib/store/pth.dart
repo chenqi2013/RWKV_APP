@@ -11,9 +11,13 @@ class _Pth {
 extension _$Pth on _Pth {
   FV _init() async {
     if (!P.preference.hasUnlinkDefaultModelsDirOnce) {
-      qqr("add default models dir to pth folder entries");
       final defaultModelsDir = P.remote.defaultModelsDir.q;
-      await P.preference.addPthFolderEntry(PthFolderEntry(path: defaultModelsDir));
+      if (defaultModelsDir.isEmpty) {
+        qqw("Default models dir is not ready, skip adding it to pth folder entries");
+      } else {
+        qqr("add default models dir to pth folder entries");
+        await P.preference.addPthFolderEntry(PthFolderEntry(path: defaultModelsDir));
+      }
     }
 
     await _atuoCreateModelsDir();
@@ -42,6 +46,10 @@ extension _$Pth on _Pth {
 
   Future<void> _atuoCreateModelsDir() async {
     if (!Platform.isWindows) return;
+    if (Args.useWindowsSandboxModels) {
+      qqr("Windows sandbox mode enabled, skip creating models dir in exe path");
+      return;
+    }
     qqr("Create models dir in exe dir");
     final exeDir = File(Platform.resolvedExecutable).parent;
     final modelsDir = Directory(join(exeDir.path, 'models'));
@@ -54,7 +62,7 @@ extension _$Pth on _Pth {
 /// Public methods
 extension $Pth on _Pth {
   Future<void> onAddFolderClicked() async {
-    final path = await file_picker.FilePicker.platform.getDirectoryPath();
+    final path = await file_picker.FilePicker.getDirectoryPath();
     if (path == null) return;
     if (folders.q.any((e) => e.path == path)) {
       Alert.warning(S.current.folder_already_added);
@@ -108,8 +116,11 @@ extension $Pth on _Pth {
     await openFolder(folder.path);
   }
 
-  /// 加载指定 pth 文件并开始聊天；成功/失败与 pop 由 P.rwkv.startPthForChat 内部用 Alert 处理。
+  /// 加载指定 pth 文件并开始聊天；点击后立即收起模型选择面板，成功/失败在内部用 Alert 处理。
   Future<void> onStartPthFileForChat(FileInfo fileInfo) async {
+    if (P.remote.modelSelectorShown.q) {
+      await pop();
+    }
     await P.rwkv.startPthForChat(fileInfo);
   }
 

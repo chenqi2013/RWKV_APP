@@ -594,20 +594,20 @@ class S {
     );
   }
 
-  /// `并行推理中，同时生成 {count} 条消息`
+  /// `并行推理：{count} 条输出`
   String batch_inference_running(Object count) {
     return Intl.message(
-      '并行推理中，同时生成 $count 条消息',
+      '并行推理：$count 条输出',
       name: 'batch_inference_running',
       desc: '',
       args: [count],
     );
   }
 
-  /// `已选择第 {index} 条消息`
+  /// `已选择第 {index} 条输出`
   String batch_inference_selected(Object index) {
     return Intl.message(
-      '已选择第 $index 条消息',
+      '已选择第 $index 条输出',
       name: 'batch_inference_selected',
       desc: '',
       args: [index],
@@ -2613,9 +2613,9 @@ class S {
     return Intl.message('全部', name: 'all', desc: '', args: []);
   }
 
-  /// `全部 Prompt`
+  /// `全部提示词`
   String get all_prompt {
-    return Intl.message('全部 Prompt', name: 'all_prompt', desc: '', args: []);
+    return Intl.message('全部提示词', name: 'all_prompt', desc: '', args: []);
   }
 
   /// `无数据`
@@ -5320,6 +5320,321 @@ class S {
   /// `Русский`
   String get russian {
     return Intl.message('Русский', name: 'russian', desc: '', args: []);
+  }
+
+  /// `API 服务器`
+  String get api_server {
+    return Intl.message('API 服务器', name: 'api_server', desc: '', args: []);
+  }
+
+  /// `启动 OpenAI 兼容的本地服务器`
+  String get api_server_description {
+    return Intl.message(
+      '启动 OpenAI 兼容的本地服务器',
+      name: 'api_server_description',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `端口`
+  String get api_server_port {
+    return Intl.message('端口', name: 'api_server_port', desc: '', args: []);
+  }
+
+  /// `启动服务器`
+  String get api_server_start {
+    return Intl.message('启动服务器', name: 'api_server_start', desc: '', args: []);
+  }
+
+  /// `停止服务器`
+  String get api_server_stop {
+    return Intl.message('停止服务器', name: 'api_server_stop', desc: '', args: []);
+  }
+
+  /// `服务器运行中`
+  String get api_server_running {
+    return Intl.message(
+      '服务器运行中',
+      name: 'api_server_running',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `服务器已停止`
+  String get api_server_stopped {
+    return Intl.message(
+      '服务器已停止',
+      name: 'api_server_stopped',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `服务器启动中`
+  String get api_server_starting {
+    return Intl.message(
+      '服务器启动中',
+      name: 'api_server_starting',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `服务器地址`
+  String get api_server_url {
+    return Intl.message('服务器地址', name: 'api_server_url', desc: '', args: []);
+  }
+
+  /// `请保持 App 在前台，并让电脑与手机连接同一 Wi-Fi`
+  String get api_server_android_foreground_hint {
+    return Intl.message(
+      '请保持 App 在前台，并让电脑与手机连接同一 Wi-Fi',
+      name: 'api_server_android_foreground_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `未检测到可供电脑访问的局域网地址`
+  String get api_server_no_lan_address {
+    return Intl.message(
+      '未检测到可供电脑访问的局域网地址',
+      name: 'api_server_no_lan_address',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `请先选择一个聊天模型`
+  String get api_server_select_model_first {
+    return Intl.message(
+      '请先选择一个聊天模型',
+      name: 'api_server_select_model_first',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `请求数`
+  String get api_server_request_count {
+    return Intl.message(
+      '请求数',
+      name: 'api_server_request_count',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `打开控制面板`
+  String get api_server_open_dashboard {
+    return Intl.message(
+      '打开控制面板',
+      name: 'api_server_open_dashboard',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `使用示例`
+  String get api_server_curl_hint {
+    return Intl.message(
+      '使用示例',
+      name: 'api_server_curl_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `未加载模型`
+  String get api_server_no_model {
+    return Intl.message(
+      '未加载模型',
+      name: 'api_server_no_model',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `请求日志`
+  String get api_server_logs {
+    return Intl.message('请求日志', name: 'api_server_logs', desc: '', args: []);
+  }
+
+  /// `当前请求: 有`
+  String get api_server_active_request_yes {
+    return Intl.message(
+      '当前请求: 有',
+      name: 'api_server_active_request_yes',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `当前请求: 无`
+  String get api_server_active_request_no {
+    return Intl.message(
+      '当前请求: 无',
+      name: 'api_server_active_request_no',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `对话测试`
+  String get api_server_chat_test {
+    return Intl.message(
+      '对话测试',
+      name: 'api_server_chat_test',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `发送一条消息来测试 API`
+  String get api_server_chat_empty_hint {
+    return Intl.message(
+      '发送一条消息来测试 API',
+      name: 'api_server_chat_empty_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `输入消息...`
+  String get api_server_chat_input_hint {
+    return Intl.message(
+      '输入消息...',
+      name: 'api_server_chat_input_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `发送`
+  String get api_server_send {
+    return Intl.message('发送', name: 'api_server_send', desc: '', args: []);
+  }
+
+  /// `API 文档`
+  String get api_server_docs {
+    return Intl.message('API 文档', name: 'api_server_docs', desc: '', args: []);
+  }
+
+  /// `错误: {error}`
+  String api_server_chat_error(Object error) {
+    return Intl.message(
+      '错误: $error',
+      name: 'api_server_chat_error',
+      desc: '',
+      args: [error],
+    );
+  }
+
+  /// `API 服务器已在端口 {port} 启动`
+  String api_server_started_on_port(Object port) {
+    return Intl.message(
+      'API 服务器已在端口 $port 启动',
+      name: 'api_server_started_on_port',
+      desc: '',
+      args: [port],
+    );
+  }
+
+  /// `API 服务器启动失败: {error}`
+  String api_server_failed_to_start(Object error) {
+    return Intl.message(
+      'API 服务器启动失败: $error',
+      name: 'api_server_failed_to_start',
+      desc: '',
+      args: [error],
+    );
+  }
+
+  /// `已停止当前请求`
+  String get api_server_active_request_stopped {
+    return Intl.message(
+      '已停止当前请求',
+      name: 'api_server_active_request_stopped',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `当前没有进行中的请求`
+  String get api_server_no_active_request {
+    return Intl.message(
+      '当前没有进行中的请求',
+      name: 'api_server_no_active_request',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `问题`
+  String get question {
+    return Intl.message('问题', name: 'question', desc: '', args: []);
+  }
+
+  /// `多问题并行`
+  String get multi_question_title {
+    return Intl.message(
+      '多问题并行',
+      name: 'multi_question_title',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `同时提问多个问题，并行获取回答`
+  String get multi_question_entry_detail {
+    return Intl.message(
+      '同时提问多个问题，并行获取回答',
+      name: 'multi_question_entry_detail',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `输入你的问题...`
+  String get multi_question_input_hint {
+    return Intl.message(
+      '输入你的问题...',
+      name: 'multi_question_input_hint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `暂无回答`
+  String get multi_question_no_answer {
+    return Intl.message(
+      '暂无回答',
+      name: 'multi_question_no_answer',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `继续对话`
+  String get multi_question_continue {
+    return Intl.message(
+      '继续对话',
+      name: 'multi_question_continue',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `全部发送`
+  String get multi_question_send_all {
+    return Intl.message(
+      '全部发送',
+      name: 'multi_question_send_all',
+      desc: '',
+      args: [],
+    );
   }
 }
 

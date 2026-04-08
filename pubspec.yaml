@@ -1,7 +1,7 @@
 name: zone
 description: "An app to show RWKV model in mobile app. Developed with Flutter."
 publish_to: "none"
-version: 4.2.7+699
+version: 4.3.3+704
 
 environment:
   sdk: ^3.11.0
@@ -18,18 +18,6 @@ dependencies:
   #    git:
   #      url: https://github.com/MollySophia/rwkv_mobile_flutter
   #      ref: dev
-
-  photo_viewer:
-    # Local development, fix some bugs
-    # path: ../photo_viewer
-    # Git development, for your company's project
-    git:
-      url: https://github.com/HaloWang/photo_viewer
-      ref: main
-    # Original repository
-    # git:
-    #   url: https://github.com/kumamotone/photo_viewer
-    #   ref: main
 
   vclibs:
     # Local development, fix some bugs
@@ -84,7 +72,7 @@ dependencies:
       url: https://github.com/pvsvamsi/Disable-Battery-Optimizations
       ref: 3bd744d
 
-  adaptive_dialog: 2.5.0
+  adaptive_dialog:
   archive:
   audioplayers:
   background_downloader:
@@ -103,7 +91,7 @@ dependencies:
   flutter_riverpod: 2.6.1
   flutter_staggered_grid_view: ^0.7.0
   flutter_svg: ^2.2.3
-  font_awesome_flutter: 10.12.0
+  font_awesome_flutter:
   freezed_annotation:
   gaimon:
   gal:
@@ -123,6 +111,7 @@ dependencies:
   path:
   path_provider:
   permission_handler:
+  photo_viewer:
   pretty_qr_code:
   record:
   rxdart:
@@ -171,6 +160,7 @@ flutter:
     - assets/filter.txt
     - assets/lambada_test.jsonl
     - assets/config/code_highlights/
+    - assets/api_server/
 
     # QNN libraries for Android
     - path: assets/lib/qnn/

@@ -1,4 +1,5 @@
 // Dart imports:
+import 'dart:io';
 import 'dart:math';
 
 // Flutter imports:
@@ -49,15 +50,19 @@ class PageHome extends ConsumerWidget {
 
     if (maxWidth < 0) maxWidth = .infinity;
 
-    final widgets = const [
-      _ChatButton(),
-      _CompletionButton(),
-      _VisualButton(),
-      _TTSButton(),
-      _RolePlayButton(),
-      _TranslatorButton(),
-      _NekoButton(),
-      _BenchmarkButton(),
+    final isDesktop = ref.watch(P.app.isDesktop);
+    final showApiServer = isDesktop || Platform.isAndroid;
+
+    final widgets = [
+      const _ChatButton(),
+      const _CompletionButton(),
+      const _VisualButton(),
+      const _TTSButton(),
+      const _RolePlayButton(),
+      const _TranslatorButton(),
+      const _NekoButton(),
+      const _BenchmarkButton(),
+      if (showApiServer) const _ApiServerButton(),
     ];
 
     return Scaffold(
@@ -87,7 +92,7 @@ class PageHome extends ConsumerWidget {
                     child: widgets[index],
                   );
                 },
-                itemCount: 8,
+                itemCount: widgets.length,
               ),
             ),
           ),
@@ -413,7 +418,7 @@ class _ModelLoadingDialog extends StatefulWidget {
   static Future<bool> show(BuildContext context, FileInfo file) async {
     final r = await showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (context) => _ModelLoadingDialog(file: file),
     );
     return r ?? false;
@@ -429,7 +434,7 @@ class _ModelLoadingDialogState extends State<_ModelLoadingDialog> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        await P.rwkv.loadChat(fileInfo: widget.file).timeout(const Duration(seconds: 10));
+        await P.rwkv.loadChat(fileInfo: widget.file);
         if (mounted) Navigator.pop(context, true);
       } catch (e) {
         qqe('load model failed: $e');
@@ -472,9 +477,29 @@ class _RolePlayButton extends ConsumerWidget {
         push(.rolePlaying);
       },
       color: Colors.yellow,
-      icon: const FaIcon(Icons.emoji_emotions_outlined, color: Colors.white),
+      icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.white),
       title: s.role_play,
       description: s.role_play_intro,
+    );
+  }
+}
+
+class _ApiServerButton extends ConsumerWidget {
+  const _ApiServerButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+
+    return _HomeCard(
+      heightsKey: 'apiServer',
+      onTap: () {
+        push(.apiServer);
+      },
+      color: Colors.teal,
+      icon: const FaIcon(FontAwesomeIcons.server, color: Colors.white, size: 20),
+      title: s.api_server,
+      description: s.api_server_description,
     );
   }
 }

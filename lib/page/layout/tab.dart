@@ -11,7 +11,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:halo/halo.dart';
 
 // Project imports:
-import 'package:zone/gen/l10n.dart' show S;
+import 'package:zone/gen/l10n.dart';
 import 'package:zone/store/p.dart';
 
 class PageTab extends ConsumerWidget {
@@ -169,9 +169,9 @@ enum _TabLabelKey {
 
 class _TabItem extends ConsumerWidget {
   final _TabLabelKey labelKey;
-  final IconData icon;
+  final FaIconData icon;
   final int index;
-  final IconData selectedIcon;
+  final FaIconData selectedIcon;
 
   const _TabItem({
     required this.labelKey,
