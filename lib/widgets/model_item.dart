@@ -12,11 +12,9 @@ import 'package:halo/halo.dart';
 import 'package:halo_alert/halo_alert.dart';
 import 'package:halo_state/halo_state.dart';
 import 'package:rwkv_downloader/downloader.dart';
-import 'package:rwkv_mobile_flutter/rwkv.dart';
 import 'package:sprintf/sprintf.dart';
 
 // Project imports:
-import 'package:zone/func/extensions/num.dart';
 import 'package:zone/func/format_bytes.dart';
 import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/file_info.dart';
@@ -80,8 +78,8 @@ class ModelItem extends ConsumerWidget {
     }
 
     try {
-      P.rwkv.clearStates();
-      await P.rwkv.loadSudoku(modelPath: modelPath, backend: backend!);
+      P.rwkvGeneration.clearStates();
+      await P.rwkvModel.loadSudoku(modelPath: modelPath, backend: backend!);
     } catch (e) {
       Alert.error(e.toString());
     }
@@ -93,12 +91,12 @@ class ModelItem extends ConsumerWidget {
 
   Future<void> _onStartTapInChat() async {
     qq;
-    if (P.rwkv.generating.q) {
+    if (P.rwkvGeneration.generating.q) {
       Alert.warning(S.current.please_wait_for_the_model_to_generate);
       return;
     }
 
-    if (P.rwkv.loading.q) {
+    if (P.rwkvModel.loading.q) {
       Alert.info(S.current.please_wait_for_the_model_to_load);
       return;
     }
@@ -140,64 +138,10 @@ class ModelItem extends ConsumerWidget {
       await pop();
     }
 
-    try {
-      P.rwkv.clearStates();
-      await P.rwkv.loadChat(fileInfo: fileInfo);
-    } catch (e) {
-      qqe;
-      Alert.error(e.toString());
-      return;
-    }
-
-    final batchAllowed = fileInfo.tags.contains("batch");
-    if (!batchAllowed) P.chat.batchEnabled.q = false;
-
-    final tags = fileInfo.tags;
-
-    final isTranslate = tags.contains("translate");
-    final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
-    if (modelID == null) {
-      return;
-    }
-    if (isTranslate) {
-      if (P.translator.enToZh.q) {
-        P.rwkv.send(SetUserRole("English", modelID: modelID));
-        P.rwkv.send(SetResponseRole(responseRole: "Chinese", modelID: modelID));
-      } else {
-        P.rwkv.send(SetUserRole("Chinese", modelID: modelID));
-        P.rwkv.send(SetResponseRole(responseRole: "English", modelID: modelID));
-      }
-      await P.rwkv.setModelConfig(thinkingMode: .none, prompt: "<EOD>", setPrompt: true);
-      P.backend.start();
-    } else {
-      P.rwkv.send(SetUserRole("User", modelID: modelID));
-      P.rwkv.send(SetResponseRole(responseRole: "Assistant", modelID: modelID));
-    }
-
-    if (!loadButtonTextShowLoad) {
-      Alert.success(S.current.you_can_now_start_to_chat_with_rwkv);
-    }
-
-    final currentModelIsBefore20250922 = P.rwkv.currentModelIsBefore20250922.q;
-
-    if (!isTranslate) {
-      if (currentModelIsBefore20250922) {
-        P.rwkv.setModelConfig(thinkingMode: .lighting);
-      } else {
-        P.rwkv.setModelConfig(thinkingMode: .fast);
-      }
-    }
-
-    P.preference.saveLastChatModel({
-      "fileName": fileInfo.fileName,
-      "fileSize": fileInfo.fileSize,
-    });
-
-    for (var i = 0; i < 3; i++) {
-      (500 * i).msLater.then((_) {
-        P.rwkv.send(GetSupportedBatchSizes(modelID: modelID));
-      });
-    }
+    await P.rwkvAutoLoad.loadSelectedChatModel(
+      fileInfo: fileInfo,
+      showSuccess: !loadButtonTextShowLoad,
+    );
   }
 
   @override
@@ -205,10 +149,10 @@ class ModelItem extends ConsumerWidget {
     final s = S.of(context);
     final localFile = ref.watch(P.remote.locals(fileInfo));
     final hasFile = localFile.hasFile;
-    final currentModel = ref.watch(P.rwkv.latestModel);
+    final currentModel = ref.watch(P.rwkvModel.latest);
     final isCurrentModel = this.isCurrentModel || currentModel == fileInfo;
-    final loadingStatus = ref.watch(P.rwkv.loadingStatus);
-    final loadingProgress = ref.watch(P.rwkv.loadingProgress);
+    final loadingStatus = ref.watch(P.rwkvModel.loadingStatus);
+    final loadingProgress = ref.watch(P.rwkvModel.loadingProgress);
 
     final loading =
         loadingStatus[fileInfo] == .loading ||
@@ -241,7 +185,7 @@ class ModelItem extends ConsumerWidget {
 
     if (loadButtonTextShowLoad) startTitle = S.current.load_;
 
-    final unzipping = ref.watch(P.rwkv.unzippingStatus(fileInfo));
+    final unzipping = ref.watch(P.rwkvModel.unzippingStatus(fileInfo));
     if (unzipping) startTitle = s.unzipping;
     final showLoadingProgress = loading && !unzipping;
 
@@ -530,12 +474,13 @@ class _Tags extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final quantization = fileInfo.quantization?.toUpperCase();
-    final tags = fileInfo.tags.where((e) => !_blockedTags.contains(e.toLowerCase()));
+    final tags = fileInfo.effectiveTags.where((e) => !_blockedTags.contains(e.toLowerCase()));
     final date = fileInfo.dateDisplayString;
     List<String> hiddenTags = [];
 
-    if (Platform.isIOS || Platform.isMacOS) hiddenTags = ["gpu"];
+    if ((Platform.isIOS || Platform.isMacOS) && theme.platform != TargetPlatform.android) hiddenTags = ["gpu"];
 
     return Wrap(
       spacing: 4,

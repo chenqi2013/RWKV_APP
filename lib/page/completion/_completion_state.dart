@@ -11,13 +11,13 @@ import 'package:zone/widgets/completion/batch_completion_settings_panel.dart';
 class CompletionState {
   static final tipsDisabled = qs(false);
 
-  static final model = P.rwkv.latestModel;
+  static final model = P.rwkvModel.latest;
 
   static final generating = qs(false);
 
   static final generateButtonEnabled = qs(false);
 
-  static final decodeParamType = P.rwkv.decodeParamType;
+  static final decodeParamType = P.rwkvParams.decodeParamType;
 
   static final batchSettings = BatchCompletionSettingsPanel.settings;
 
@@ -168,29 +168,24 @@ class CompletionItemNode {
 class BatchCompletionSettings {
   final bool enabled;
   final int batchCount;
-  final int width;
 
   final int row = 1;
 
   int get col => enabled ? batchCount : 1;
 
-  double get colWidthPercent => width / 100.0;
-
   int get batchSize => row * col;
 
-  factory BatchCompletionSettings.initial() => BatchCompletionSettings(enabled: false, batchCount: 2, width: 65);
+  factory BatchCompletionSettings.initial() => BatchCompletionSettings(enabled: false, batchCount: 2);
 
-  BatchCompletionSettings({required this.enabled, required this.batchCount, required this.width});
+  BatchCompletionSettings({required this.enabled, required this.batchCount});
 
   BatchCompletionSettings copyWith({
     bool? enabled,
     int? batchCount,
-    int? width,
   }) {
     return BatchCompletionSettings(
       enabled: enabled ?? this.enabled,
       batchCount: batchCount ?? this.batchCount,
-      width: width ?? this.width,
     );
   }
 }

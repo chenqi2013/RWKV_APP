@@ -1,12 +1,17 @@
-name: Linux x64
+name: Linux x64 tar.gz
 
-run-name: ${{ github.ref_name }} Linux x64
+run-name: ${{ github.ref_name }} Linux x64 tar.gz
 
 on:
   push:
     tags:
       - "[0-9]*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to build and publish, for example 4.4.7"
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,11 +28,13 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       build_number: ${{ steps.meta.outputs.build_number }}
       archive_name: ${{ steps.meta.outputs.archive_name }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
       should_publish: ${{ steps.meta.outputs.should_publish }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.release_tag || github.ref }}
           sparse-checkout: pubspec.yaml
           sparse-checkout-cone-mode: false
 
@@ -40,16 +47,23 @@ jobs:
           if [ -z "$BUILD_NUMBER" ]; then BUILD_NUMBER="1"; fi
 
           ARCHIVE_NAME="rwkv_chat_${VERSION}_${BUILD_NUMBER}_linux-x64.tar.gz"
+          MANUAL_RELEASE_TAG="${{ inputs.release_tag }}"
 
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            RELEASE_TAG="$GITHUB_REF_NAME"
+            SHOULD_PUBLISH="true"
+          elif [ -n "$MANUAL_RELEASE_TAG" ]; then
+            RELEASE_TAG="$MANUAL_RELEASE_TAG"
             SHOULD_PUBLISH="true"
           else
+            RELEASE_TAG=""
             SHOULD_PUBLISH="false"
           fi
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
           echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "should_publish=$SHOULD_PUBLISH" >> $GITHUB_OUTPUT
 
   build:
@@ -59,6 +73,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Checkout rwkv_mobile_flutter dependency
         uses: actions/checkout@v4
@@ -92,8 +108,17 @@ jobs:
       - name: Override dependency path
         run: |
           echo "dependency_overrides:" > pubspec_overrides.yaml
-          echo "  rwkv_mobile_flutter:" >> pubspec_overrides.yaml
-          echo "    path: ./rwkv_mobile_flutter" >> pubspec_overrides.yaml
+            echo "  proxy_setting_android:" >> pubspec_overrides.yaml
+            echo "    git:" >> pubspec_overrides.yaml
+            echo "      url: https://github.com/dengzii/proxy_setting.git" >> pubspec_overrides.yaml
+            echo "      path: packages/proxy_setting_android" >> pubspec_overrides.yaml
+            echo "      ref: main" >> pubspec_overrides.yaml
+            echo "  rwkv_downloader:" >> pubspec_overrides.yaml
+            echo "    git:" >> pubspec_overrides.yaml
+            echo "      url: https://github.com/RWKV-APP/rwkv_downloader.git" >> pubspec_overrides.yaml
+            echo "      ref: v1" >> pubspec_overrides.yaml
+            echo "  rwkv_mobile_flutter:" >> pubspec_overrides.yaml
+            echo "    path: ./rwkv_mobile_flutter" >> pubspec_overrides.yaml
 
       - name: Create .env file
         uses: ./.github/actions/create-env
@@ -112,7 +137,13 @@ jobs:
         run: flutter doctor -v
 
       - name: Build Linux x64
-        run: flutter build linux --release --target-platform linux-x64
+        run: >
+          flutter build linux
+          --release
+          --target-platform linux-x64
+          --split-debug-info=build/sentry-symbols/linux-x64
+          --dart-define=SENTRY_RELEASE=rwkv-chat@${{ needs.setup.outputs.version }}+${{ needs.setup.outputs.build_number }}
+          --dart-define=SENTRY_DIST=${{ needs.setup.outputs.build_number }}
 
       - name: Remove aarch64 libraries
         run: |
@@ -129,15 +160,28 @@ jobs:
             echo "Removed $REMOVED_COUNT aarch64 library file(s)"
           fi
 
+      - name: Upload Sentry debug files
+        if: needs.setup.outputs.should_publish == 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "SENTRY_AUTH_TOKEN secret is required for Sentry symbol upload" >&2
+            exit 1
+          fi
+          dart run sentry_dart_plugin \
+            --sentry-define=symbols_path=build/sentry-symbols/linux-x64 \
+            --sentry-define=release=rwkv-chat@${{ needs.setup.outputs.version }}+${{ needs.setup.outputs.build_number }} \
+            --sentry-define=dist=${{ needs.setup.outputs.build_number }}
+
       - name: Create archive
         id: create-archive
         env:
           ARCHIVE_NAME: ${{ needs.setup.outputs.archive_name }}
         run: |
-          cd build/linux/x64/release/bundle
-          tar -czf "$ARCHIVE_NAME" *
+          tar -czf "$GITHUB_WORKSPACE/$ARCHIVE_NAME" -C build/linux/x64/release/bundle .
 
-          ARCHIVE_FULL_PATH="$(pwd)/$ARCHIVE_NAME"
+          ARCHIVE_FULL_PATH="$GITHUB_WORKSPACE/$ARCHIVE_NAME"
           echo "archive_path=$ARCHIVE_FULL_PATH" >> $GITHUB_OUTPUT
 
       - name: Upload build artifact
@@ -162,6 +206,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.setup.outputs.release_tag }}
           generate_release_notes: false
           files: "*.tar.gz"
 

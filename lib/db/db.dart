@@ -1,3 +1,6 @@
+// Dart imports:
+import 'dart:convert';
+
 // Package imports:
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -8,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 // Project imports:
 import 'package:zone/config.dart';
 import 'package:zone/db/db.steps.dart';
+import 'package:zone/func/conversation_subtitle.dart';
 import 'package:zone/model/message.dart' as model;
 import 'package:zone/model/message_type.dart' as model;
 import 'package:zone/model/msg_node.dart';
@@ -85,6 +89,8 @@ class _Msg extends Table {
 
   TextColumn get rawDecodeParams => text().nullable()();
 
+  TextColumn get batchSlotLabels => text().nullable()();
+
   RealColumn get prefillSpeed => real().nullable()();
 
   RealColumn get decodeSpeed => real().nullable()();
@@ -106,14 +112,26 @@ class _ConversationTitleRepairCandidate {
   });
 }
 
+class _ConversationSubtitleRepairCandidate {
+  final int createdAtUS;
+  final int botMsgId;
+
+  const _ConversationSubtitleRepairCandidate({
+    required this.createdAtUS,
+    required this.botMsgId,
+  });
+}
+
 @DriftDatabase(tables: [_Conversation, _Msg])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
+  static const databaseFileName = 'rwkv_db.sqlite';
+
   bool _didRepairLegacyConversationTitles = false;
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration {
@@ -140,6 +158,9 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(schema.msg, schema.msg.messageTokensCount);
           await m.addColumn(schema.msg, schema.msg.conversationTokensCount);
         },
+        from7To8: (m, schema) async {
+          await m.addColumn(schema.msg, schema.msg.batchSlotLabels);
+        },
       ),
       beforeOpen: (details) async {
         if (!details.hadUpgrade) {
@@ -161,9 +182,9 @@ class AppDatabase extends _$AppDatabase {
             if (m == null) {
               continue;
             }
-            String subtitle = m.content.replaceAll('\n', '').replaceAll('</think>', '').replaceAll('<think>', '');
-            if (subtitle.length > 200) {
-              subtitle = subtitle.substring(0, 200);
+            final subtitle = buildConversationSubtitleFromResponseContent(m.content);
+            if (subtitle.isEmpty) {
+              continue;
             }
             await updateConv(conv.createdAtUS, subtitle: subtitle);
           }
@@ -204,6 +225,7 @@ class AppDatabase extends _$AppDatabase {
       runningMode: Value(message.runningMode),
       build: P.app.buildNumber.q,
       rawDecodeParams: Value(message.rawDecodeParams),
+      batchSlotLabels: Value(message.batchSlotLabels == null ? null : jsonEncode(message.batchSlotLabels)),
       prefillSpeed: Value(message.prefillSpeed),
       decodeSpeed: Value(message.decodeSpeed),
       messageTokensCount: Value(message.messageTokensCount),
@@ -265,6 +287,15 @@ class AppDatabase extends _$AppDatabase {
     final success =
         await (update(conversation)..where((tbl) => tbl.createdAtUS.equals(createAtInUS))).write(
           _ConversationCompanion(title: Value(title)),
+        ) >
+        0;
+    return success;
+  }
+
+  Future<bool> _updateConvSubtitleWithoutTouchingUpdatedAt(int createAtInUS, String subtitle) async {
+    final success =
+        await (update(conversation)..where((tbl) => tbl.createdAtUS.equals(createAtInUS))).write(
+          _ConversationCompanion(subtitle: Value(subtitle)),
         ) >
         0;
     return success;
@@ -335,6 +366,65 @@ class AppDatabase extends _$AppDatabase {
       hasRepairedTitle = true;
     }
     return hasRepairedTitle;
+  }
+
+  Future<bool> _repairMissingConversationSubtitles(List<ConversationData> conversations) async {
+    final candidates = <_ConversationSubtitleRepairCandidate>[];
+    for (final conversationData in conversations) {
+      if (conversationData.subtitle != null && conversationData.subtitle!.isNotEmpty) {
+        continue;
+      }
+      late final MsgNode msgNode;
+      try {
+        msgNode = MsgNode.fromJson(
+          conversationData.data,
+          createAtInUS: conversationData.createdAtUS,
+        );
+      } catch (e) {
+        qqe("repair subtitle: parse MsgNode failed, createAtUS=${conversationData.createdAtUS}, error=$e");
+        continue;
+      }
+      final ids = msgNode.latestMsgIdsWithoutRoot;
+      final botMsgId = ids.length >= 2 ? ids[1] : null;
+      if (botMsgId == null) {
+        continue;
+      }
+      candidates.add(
+        _ConversationSubtitleRepairCandidate(
+          createdAtUS: conversationData.createdAtUS,
+          botMsgId: botMsgId,
+        ),
+      );
+    }
+    if (candidates.isEmpty) {
+      return false;
+    }
+
+    final botMsgIds = <int>{
+      for (final _ConversationSubtitleRepairCandidate candidate in candidates) candidate.botMsgId,
+    };
+    final botMsgDataList = await (select(msg)..where((tbl) => tbl.id.isIn(botMsgIds))).get();
+    final botMsgById = <int, _MsgData>{
+      for (final _MsgData botMsgData in botMsgDataList) botMsgData.id: botMsgData,
+    };
+
+    bool hasRepairedSubtitle = false;
+    for (final _ConversationSubtitleRepairCandidate candidate in candidates) {
+      final _MsgData? botMsgData = botMsgById[candidate.botMsgId];
+      if (botMsgData == null) {
+        continue;
+      }
+      final subtitle = buildConversationSubtitleFromResponseContent(botMsgData.content);
+      if (subtitle.isEmpty) {
+        continue;
+      }
+      final updated = await _updateConvSubtitleWithoutTouchingUpdatedAt(candidate.createdAtUS, subtitle);
+      if (!updated) {
+        continue;
+      }
+      hasRepairedSubtitle = true;
+    }
+    return hasRepairedSubtitle;
   }
 
   _ConversationCompanion _conversationToConversationCompanion(MsgNode msgNode, {required String title}) {
@@ -427,10 +517,31 @@ class AppDatabase extends _$AppDatabase {
 
     final conversationDataList = await query.get();
     final hasRepairedTitles = await _repairLegacyTruncatedTitles(conversationDataList);
-    if (!hasRepairedTitles) {
+    final hasRepairedSubtitles = await _repairMissingConversationSubtitles(conversationDataList);
+    if (!hasRepairedTitles && !hasRepairedSubtitles) {
       return conversationDataList;
     }
     return await query.get();
+  }
+
+  Future<List<ConversationData>> allConversationsForExport() async {
+    final query = select(conversation)
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.updatedAtUS),
+        (t) => OrderingTerm.desc(t.createdAtUS),
+      ]);
+
+    final conversationDataList = await query.get();
+    final hasRepairedTitles = await _repairLegacyTruncatedTitles(conversationDataList);
+    final hasRepairedSubtitles = await _repairMissingConversationSubtitles(conversationDataList);
+    if (!hasRepairedTitles && !hasRepairedSubtitles) {
+      return conversationDataList;
+    }
+    return await query.get();
+  }
+
+  Future<void> exportSqliteSnapshot(String targetPath) async {
+    await customStatement('VACUUM INTO ${_sqliteStringLiteral(targetPath)}');
   }
 
   Future<ConversationData?> findConvByCreateAtInUS(int createAtInUS) async {
@@ -447,6 +558,10 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> deleteMsgsByCreateAtInUS(Iterable<int> ids) async {
     return await (delete(msg)..where((tbl) => tbl.id.isIn(ids))).go() > 0;
   }
+}
+
+String _sqliteStringLiteral(String value) {
+  return "'${value.replaceAll("'", "''")}'";
 }
 
 model.Message _msgDataToMessage(_MsgData msgData) {
@@ -470,6 +585,7 @@ model.Message _msgDataToMessage(_MsgData msgData) {
     modelName: msgData.modelName,
     runningMode: msgData.runningMode,
     rawDecodeParams: msgData.rawDecodeParams,
+    batchSlotLabels: (jsonDecode(msgData.batchSlotLabels ?? "null") as Iterable?)?.map((dynamic e) => e.toString()).toList(),
     prefillSpeed: msgData.prefillSpeed,
     decodeSpeed: msgData.decodeSpeed,
     messageTokensCount: msgData.messageTokensCount,

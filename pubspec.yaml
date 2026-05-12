@@ -1,7 +1,7 @@
 name: zone
 description: "An app to show RWKV model in mobile app. Developed with Flutter."
 publish_to: "none"
-version: 4.3.3+704
+version: 4.4.8+722
 
 environment:
   sdk: ^3.11.0
@@ -115,7 +115,7 @@ dependencies:
   pretty_qr_code:
   record:
   rxdart:
-  sentry_flutter:
+  sentry_flutter: ^9.18.0
   share_plus:
   shared_preferences:
   shelf:
@@ -126,8 +126,18 @@ dependencies:
   url_launcher:
   wakelock_plus:
   web_socket_channel:
+  detect_proxy_setting: ^0.0.9
 
 dependency_overrides:
+  proxy_setting_android:
+    git:
+      url: https://github.com/dengzii/proxy_setting.git
+      path: packages/proxy_setting_android
+      ref: main
+  rwkv_downloader:
+    git:
+      url: https://github.com/RWKV-APP/rwkv_downloader.git
+      ref: v1
   rwkv_mobile_flutter:
     path: ../rwkv_mobile_flutter
 
@@ -181,5 +191,7 @@ flutter_intl:
 sentry:
   upload_debug_symbols: true
   upload_source_maps: true
+  upload_sources: true
+  wait_for_processing: true
   project: rwkv0
   org: ce-wang

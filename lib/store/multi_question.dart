@@ -8,7 +8,7 @@ class _MultiQuestion {
   late final questions = qs<List<String>>([]);
 
   late final canSend = qp((ref) {
-    final generating = ref.watch(P.rwkv.generating);
+    final generating = ref.watch(P.rwkvGeneration.generating);
     if (generating) return false;
     final questionList = ref.watch(questions);
     return questionList.any((q) => q.trim().isNotEmpty);
@@ -22,17 +22,7 @@ class _MultiQuestion {
 /// Public methods
 extension $MultiQuestion on _MultiQuestion {
   List<String> _pickRandomSuggestions(int count, {List<String> exclude = const []}) {
-    List<Suggestion> pool;
-
-    if (P.suggestion.useHighScoreApi.q && P.suggestion.highScoreTopSuggestions.q.isNotEmpty) {
-      pool = P.suggestion.highScoreTopSuggestions.q;
-    } else {
-      pool = P.suggestion.config.q.chat.expand((c) => c.items).toList();
-    }
-
-    pool = pool.where((s) => !exclude.contains(s.prompt)).toList().shuffled;
-    final int take = count < pool.length ? count : pool.length;
-    return pool.sublist(0, take).map((s) => s.prompt).toList();
+    return P.suggestion.pickRandomChatPrompts(count, exclude: exclude);
   }
 
   void initQuestions(int count) {
@@ -87,8 +77,14 @@ extension $MultiQuestion on _MultiQuestion {
     ];
     if (nonEmpty.isEmpty) return;
 
+    final currentModel = P.rwkvModel.latest.q;
+    if (currentModel == null || !currentModel.supportsBatchInference) {
+      Alert.warning(S.current.this_model_does_not_support_batch_inference, position: AlertPosition.bottom);
+      return;
+    }
+
     // 检查模型是否支持 batch
-    final List<int> supported = P.rwkv.supportedBatchSizes.q;
+    final List<int> supported = P.rwkvParams.supportedBatchSizes.q;
     if (supported.isEmpty) {
       Alert.warning(S.current.this_model_does_not_support_batch_inference, position: AlertPosition.bottom);
       return;
@@ -125,18 +121,22 @@ extension $MultiQuestion on _MultiQuestion {
       return;
     }
 
+    final currentModel = P.rwkvModel.latest.q;
+    if (currentModel == null || !currentModel.supportsBatchInference) {
+      Alert.warning(S.current.this_model_does_not_support_batch_inference, position: AlertPosition.bottom);
+      return;
+    }
+
     if (!checkModelSelection(preferredDemoType: .chat)) return;
 
-    if (P.rwkv.generating.q) {
+    if (P.rwkvGeneration.generating.q) {
       Alert.warning(S.current.please_wait_for_the_model_to_finish_generating, position: AlertPosition.bottom);
       return;
     }
 
-    final thinkingMode = P.rwkv.thinkingMode.q;
-    final currentModel = P.rwkv.latestModel.q;
-
+    final thinkingMode = P.rwkvParams.thinkingMode.q;
     // 1. 构建 batch 格式的用户消息 content
-    final String userBatchContent = effectiveQuestions.join(Config.batchMarker) + Config.batchMarker + "-1";
+    final String userBatchContent = buildBatchContent(effectiveQuestions);
     final String storedContent = userBatchContent + Config.userMsgModifierSep + thinkingMode.userMsgFooter;
 
     // 2. 处理父节点的 batch finalization (同 _Chat.send 727-737)
@@ -146,7 +146,13 @@ extension $MultiQuestion on _MultiQuestion {
       final selection = P.msg.batchSelection(parentMsg).q;
       if (selection != null) {
         final finalizedContent = parentMsg.content.split(Config.batchMarker)[selection];
-        P.msg._syncMsg(parentMsg.id, parentMsg.copyWith(content: finalizedContent));
+        P.msg._syncMsg(
+          parentMsg.id,
+          parentMsg.copyWith(
+            content: finalizedContent,
+            clearBatchSlotLabels: true,
+          ),
+        );
         unawaited(
           P.chat._refreshTokenCountsForMessage(
             messageId: parentMsg.id,
@@ -200,7 +206,7 @@ extension $MultiQuestion on _MultiQuestion {
       isMine: false,
       changing: true,
       paused: false,
-      modelName: currentModel?.name,
+      modelName: currentModel.name,
       runningMode: thinkingMode.toString(),
       rawDecodeParams: P.chat._resolveDecodeParamsSnapshotRaw(),
     );
@@ -214,16 +220,15 @@ extension $MultiQuestion on _MultiQuestion {
     // 6. 设置 receiveId，让 _Chat._onStreamEvent 处理
     P.chat.receiveId.q = botMsgId;
     P.chat.receivedTokens.q = "";
-    P.rwkv.generating.q = true;
+    P.rwkvGeneration.generating.q = true;
 
     // 7. 关闭面板
     reset();
 
     // 8. 构建 batchMessages
-    // _history() 会读取当前消息列表，此时 userMsg 已加入
-    // history 最后一个元素是 batch 格式的用户消息，需要移除它并手动构建各 slot
+    // _history() 会读到刚创建的 batch 用户消息和 bot 占位消息
+    // 这里需要去掉这两条临时消息，再为每个 slot 重新拼接对应问题
     final List<String> history = P.chat._history();
-    // history 末尾是 [batchUserContent, emptyBotContent]，需要去掉这两个
     final List<String> historyPrefix = history.length > 2 ? history.sublist(0, history.length - 2) : [];
 
     final List<List<String>> batchMessages = [];
@@ -237,7 +242,7 @@ extension $MultiQuestion on _MultiQuestion {
 
     // 9. 发送
     final int batchSize = batchMessages.length;
-    P.rwkv.sendMessages(
+    P.rwkvGeneration.sendMessages(
       batchMessages.first,
       batchSize: batchSize,
       overrideBatchMessages: batchMessages,

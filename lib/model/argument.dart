@@ -15,8 +15,7 @@ enum Argument {
   frequencyPenalty,
   penaltyDecay,
   maxLength,
-  batchCount,
-  batchVW
+  batchCount
   ;
 
   bool get configureable => switch (this) {
@@ -28,7 +27,6 @@ enum Argument {
     penaltyDecay => true,
     maxLength => true,
     batchCount => true,
-    batchVW => true,
   };
 
   bool get show => switch (this) {
@@ -40,7 +38,6 @@ enum Argument {
     penaltyDecay => true,
     maxLength => true,
     batchCount => true,
-    batchVW => true,
   };
 
   int get fixedDecimals => switch (this) {
@@ -52,7 +49,6 @@ enum Argument {
     penaltyDecay => 3,
     maxLength => 0,
     batchCount => 0,
-    batchVW => 0,
   };
 
   double? get step => switch (this) {
@@ -64,7 +60,6 @@ enum Argument {
     penaltyDecay => .001,
     maxLength => 100,
     batchCount => 1,
-    batchVW => 5,
   };
 
   double get min => switch (this) {
@@ -76,7 +71,6 @@ enum Argument {
     penaltyDecay => .99,
     maxLength => 100,
     batchCount => 2,
-    batchVW => 40,
   };
 
   double get max => switch (this) {
@@ -88,12 +82,11 @@ enum Argument {
     penaltyDecay => .999,
     maxLength => 10000,
     batchCount => () {
-      final supportedBatchSizes = P.rwkv.supportedBatchSizes.q;
+      final supportedBatchSizes = P.rwkvParams.supportedBatchSizes.q;
       if (supportedBatchSizes.isEmpty) return 4.0;
       final max = supportedBatchSizes.max;
       return max.toDouble();
     }(),
-    batchVW => 80,
   };
 
   double get reasonDefaults => switch (this) {
@@ -105,7 +98,6 @@ enum Argument {
     penaltyDecay => DecodeParamType.defaults.penaltyDecay,
     maxLength => Args.maxTokens > 0 ? Args.maxTokens.toDouble() : 10000,
     batchCount => Args.batchCount.toDouble(),
-    batchVW => Args.batchVW.toDouble(),
   };
 
   double get defaults => switch (this) {
@@ -117,7 +109,6 @@ enum Argument {
     penaltyDecay => DecodeParamType.defaults.penaltyDecay,
     maxLength => Args.maxTokens > 0 ? Args.maxTokens.toDouble() : 10000,
     batchCount => Args.batchCount.toDouble(),
-    batchVW => Args.batchVW.toDouble(),
   };
 
   bool get enableGaimon => switch (this) {
@@ -129,6 +120,5 @@ enum Argument {
     penaltyDecay => true,
     maxLength => false,
     batchCount => true,
-    batchVW => true,
   };
 }

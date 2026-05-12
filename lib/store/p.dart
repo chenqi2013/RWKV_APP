@@ -14,13 +14,15 @@ import 'package:flutter/services.dart';
 
 // Package imports:
 import 'package:adaptive_dialog/adaptive_dialog.dart';
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:audioplayers/audioplayers.dart' as ap;
 import 'package:collection/collection.dart';
+import 'package:detect_proxy_setting/detect_proxy_setting.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:file_picker/file_picker.dart' as file_picker;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_roleplay/models/model_info.dart';
 import 'package:flutter_roleplay/services/role_play_manage.dart';
 import 'package:gaimon/gaimon.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
@@ -59,8 +61,10 @@ import 'package:zone/args.dart';
 import 'package:zone/config.dart';
 import 'package:zone/db/db.dart' as db;
 import 'package:zone/db/db.dart';
+import 'package:zone/func/build_chat_history.dart';
 import 'package:zone/func/calculate_total_size_of_dir.dart';
 import 'package:zone/func/check_model_selection.dart';
+import 'package:zone/func/conversation_subtitle.dart';
 import 'package:zone/func/extensions/num.dart';
 import 'package:zone/func/extensions/string.dart';
 import 'package:zone/func/from_assets_to_temp.dart';
@@ -102,6 +106,7 @@ import 'package:zone/model/msg_node.dart';
 import 'package:zone/model/prompt_template.dart';
 import 'package:zone/model/ref_info.dart';
 import 'package:zone/model/reference.dart';
+import 'package:zone/model/response_style.dart';
 import 'package:zone/model/sampler_and_penalty_param.dart';
 import 'package:zone/model/serve_mode.dart';
 import 'package:zone/model/state_log.dart';
@@ -110,16 +115,18 @@ import 'package:zone/model/tts_instruction.dart';
 import 'package:zone/model/user_type.dart';
 import 'package:zone/model/version_info.dart';
 import 'package:zone/model/web_search_mode.dart';
-import 'package:zone/model/wenyan_mode.dart';
 import 'package:zone/model/world_type.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/router/page_key.dart';
 import 'package:zone/router/router.dart';
 import 'package:zone/store/albatross.dart';
 import 'package:zone/widgets/batch_settings_panel.dart';
+import 'package:zone/widgets/chat/response_style_panel.dart';
 import 'package:zone/widgets/model_selector.dart';
+import 'package:zone/widgets/role_play_item.dart';
 import 'package:zone/widgets/talk/tts_voice_source_panels.dart';
 import 'package:zone/widgets/theme_selector.dart';
+import 'package:zone/widgets/tts_group_item.dart';
 import 'package:zone/widgets/version_info_panel.dart';
 
 part "adapter.dart";
@@ -128,6 +135,7 @@ part "app.dart";
 part "backend.dart";
 part "chat.dart";
 part "conversation.dart";
+part "data_export.dart";
 part "device.dart";
 part "dump.dart";
 part "remote.dart";
@@ -138,6 +146,14 @@ part "networking.dart";
 part "othello.dart";
 part "preference.dart";
 part "rwkv.dart";
+part "rwkv_auto_load.dart";
+part "rwkv_backend.dart";
+part "rwkv_context.dart";
+part "rwkv_debug.dart";
+part "rwkv_feature.dart";
+part "rwkv_generation.dart";
+part "rwkv_model.dart";
+part "rwkv_params.dart";
 part "see.dart";
 part "sudoku.dart";
 part "suggestion.dart";
@@ -150,6 +166,8 @@ part "ui.dart";
 part "pth.dart";
 part "api_server.dart";
 part "multi_question.dart";
+part "benchmark.dart";
+part "telemetry.dart";
 
 abstract class P {
   static final adapter = _Adapter();
@@ -158,6 +176,7 @@ abstract class P {
   static final backend = _Backend();
   static final chat = _Chat();
   static final conversation = _Conversation();
+  static final dataExport = _DataExport();
   static final device = _Device();
   static final dump = _Dump();
   static final remote = _Remote();
@@ -167,7 +186,15 @@ abstract class P {
   static final msg = _Msg();
   static final othello = _Othello();
   static final preference = _Preference();
-  static final rwkv = _RWKV();
+  static final rwkvBackend = _RWKVBackend();
+  static final rwkvAutoLoad = _RWKVAutoLoad();
+  static final rwkvBridge = _RWKVBridge();
+  static final rwkvContext = _RWKVContext();
+  static final rwkvDebug = _RWKVDebug();
+  static final rwkvFeature = _RWKVFeature();
+  static final rwkvGeneration = _RWKVGeneration();
+  static final rwkvModel = _RWKVModel();
+  static final rwkvParams = _RWKVParams();
   static final sudoku = _Sudoku();
   static final suggestion = _Suggestion();
   static final translator = _Translator();
@@ -179,6 +206,8 @@ abstract class P {
   static final ui = _UI();
   static final apiServer = _ApiServer();
   static final multiQuestion = _MultiQuestion();
+  static final benchmark = _Benchmark();
+  static final telemetry = _Telemetry();
 
   static Future<void> init() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -202,7 +231,8 @@ abstract class P {
   static Future<void> _unorderedInit() async {
     await Future.wait([
       _safeInit(() => askQuestion._init(), mark: "askQuestion"),
-      _safeInit(() => rwkv._init(), mark: "rwkv"),
+      _safeInit(() => rwkvBridge._init(), mark: "rwkvBridge"),
+      _safeInit(() => rwkvAutoLoad._init(), mark: "rwkvAutoLoad"),
       _safeInit(() => chat._init(), mark: "chat"),
       _safeInit(() => othello._init(), mark: "othello"),
       _safeInit(() => remote._init(), mark: "fileManager"),
@@ -225,6 +255,8 @@ abstract class P {
       _safeInit(() => ui._init(), mark: "ui"),
       _safeInit(() => pth._init(), mark: "pth"),
       _safeInit(() => apiServer._init(), mark: "apiServer"),
+      _safeInit(() => telemetry._init(), mark: "telemetry"),
+      _safeInit(() => benchmark._init(), mark: "benchmark"),
     ]);
   }
 

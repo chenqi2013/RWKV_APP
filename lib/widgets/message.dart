@@ -76,16 +76,16 @@ class _MessageState extends ConsumerState<Message> {
     final appTheme = ref.watch(P.app.theme);
     final qb = ref.watch(P.app.qb);
     final DemoType demoType = preferredDemoType ?? ref.watch(P.app.demoType);
-    final worldType = ref.watch(P.rwkv.currentWorldType);
+    final worldType = ref.watch(P.rwkvContext.currentWorldType);
     final isMobile = ref.watch(P.app.isMobile);
     final sharingMode = ref.watch(P.chat.isSharing);
     final editingIndex = ref.watch(P.msg.editingOrRegeneratingIndex);
     final receiveId = ref.watch(P.chat.receiveId);
-    final receiving = ref.watch(P.rwkv.generating);
+    final receiving = ref.watch(P.rwkvGeneration.generating);
     final inSee = ref.watch(P.app.pageKey) == .see;
     final screenWidth = ref.watch(P.app.screenWidth);
     final screenHeight = ref.watch(P.app.screenHeight);
-    final received = ref.watch(P.chat.receivedTokens.select((String value) => msg.changing ? value : ""));
+    final received = ref.watch(P.chat.visibleReceivedTokens.select((String value) => msg.changing ? value : ""));
     final cotDisplayState = ref.watch(P.msg.cotDisplayState(msg.id));
     final batchSelection = ref.watch(P.msg.batchSelection(msg));
     final messageLineHeight = ref.watch(P.preference.effectiveMessageLineHeight);
@@ -191,6 +191,7 @@ class _MessageState extends ConsumerState<Message> {
               batchSelection: batchSelection,
               thisMessageIsReceiving: thisMessageIsReceiving,
               perSlotQuestions: perSlotQuestions,
+              slotLabels: msg.batchSlotLabels,
             ),
     );
 
@@ -300,7 +301,7 @@ class _UserMessageBubble extends ConsumerWidget {
         crossAxisAlignment: .end,
         children: [
           Container(
-            padding: bubbleStyleData.padding,
+            padding: isUserImage ? .zero : bubbleStyleData.padding,
             decoration: BoxDecoration(
               color: userMsgBg,
               border: bubbleStyleData.border,
@@ -365,6 +366,7 @@ class _BotMessageBubble extends ConsumerWidget {
   final int? batchSelection;
   final bool thisMessageIsReceiving;
   final List<String>? perSlotQuestions;
+  final List<String>? slotLabels;
 
   const _BotMessageBubble({
     required this.msg,
@@ -383,6 +385,7 @@ class _BotMessageBubble extends ConsumerWidget {
     required this.batchSelection,
     required this.thisMessageIsReceiving,
     this.perSlotQuestions,
+    this.slotLabels,
   });
 
   void _toggleCotContent() {
@@ -404,7 +407,24 @@ class _BotMessageBubble extends ConsumerWidget {
     final thoughtLabelColor = qb.q(.5);
     final appTheme = ref.watch(P.app.theme);
 
-    return Container(
+    double? fixedBatchBubbleHeight;
+    if (isBatch) {
+      final screenHeight = ref.watch(P.app.screenHeight);
+      final paddingTop = ref.watch(P.app.paddingTop);
+      final inputHeight = ref.watch(P.chat.inputHeight);
+      final reserved =
+          paddingTop +
+          kToolbarHeight +
+          4 +
+          inputHeight +
+          appTheme.msgListMarginTop +
+          appTheme.msgListMarginBottom +
+          bubbleStyleData.padding.vertical;
+      final computed = screenHeight - reserved;
+      fixedBatchBubbleHeight = math.max(200.0, computed);
+    }
+
+    final Widget bubble = Container(
       padding: bubbleStyleData.padding,
       decoration: BoxDecoration(
         color: botMsgBg,
@@ -474,13 +494,21 @@ class _BotMessageBubble extends ConsumerWidget {
               raw: thinkingData.cotResult,
               useMessageLineHeight: true,
             ),
-          if (isBatch) BatchMessageContent(msg, index, finalContent, perSlotQuestions: perSlotQuestions),
+          if (isBatch)
+            Expanded(
+              child: BatchMessageContent(msg, index, finalContent, perSlotQuestions: perSlotQuestions, slotLabels: slotLabels),
+            ),
           if (demoType == .tts) BotTtsContent(msg, index),
           if (!selectMode && demoType != .tts)
             BotMessageBottom(msg, index, preferredDemoType: preferredDemoType, finalContent: finalContent),
         ],
       ),
     );
+
+    if (fixedBatchBubbleHeight != null) {
+      return SizedBox(height: fixedBatchBubbleHeight, child: bubble);
+    }
+    return bubble;
   }
 }
 
@@ -653,7 +681,15 @@ List<String>? _resolvePerSlotQuestions({required model.Message msg}) {
   final parentContent = parentMsg.content.split(Config.userMsgModifierSep)[0];
   final (batch, isBatch, batchCount, _) = getBatchInfo(parentContent);
   if (!isBatch) return null;
-  return batch.sublist(0, batchCount);
+  final questions = batch.sublist(0, batchCount);
+  if (questions.isEmpty) return null;
+
+  final firstQuestion = questions.first.trim();
+  for (final question in questions) {
+    if (question.trim() != firstQuestion) return questions;
+  }
+
+  return null;
 }
 
 _BubbleStyleData _resolveBubbleStyleData({

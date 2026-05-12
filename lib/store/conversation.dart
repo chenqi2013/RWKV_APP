@@ -9,6 +9,12 @@ class _Conversation {
     for (int i = 0; i < 12; i++) HSLColor.fromAHSL(1.0, 30.0 * i, 0.4, 0.7).toColor(),
   ];
 
+  static final _invalidExportFileNameChars = RegExp(r'[<>:"/\\|?*]');
+  static final _blankExportFileNameChars = RegExp(r'\s+');
+  static final _trailingExportFileNameChars = RegExp(r'[. ]+$');
+  static const _maxExportFileNameBaseBytes = 120;
+  static const _fallbackExportFileNameBase = 'conversation';
+
   // ===========================================================================
   // StateProvider
   // ===========================================================================
@@ -33,7 +39,7 @@ extension _$Conversation on _Conversation {
 
   Future<void> _onMsgNodeChanged() async {
     qq;
-    if (P.rwkv.inTTSTranslateOrSee.q) return;
+    if (P.rwkvContext.inTTSTranslateOrSee.q) return;
 
     final createAtUS = P.msg.msgNode.q.createAtInUS;
     if (currentCreatedAtUS.q == createAtUS) {
@@ -44,7 +50,7 @@ extension _$Conversation on _Conversation {
 
   Future<void> _syncNode() async {
     qq;
-    if (P.rwkv.inTTSTranslateOrSee.q) return;
+    if (P.rwkvContext.inTTSTranslateOrSee.q) return;
 
     final msgNode = P.msg.msgNode.q;
     final db = P.app._db;
@@ -65,6 +71,204 @@ extension _$Conversation on _Conversation {
     final msgNode = MsgNode.fromJson(msgDataList.data, createAtInUS: createAtInUS);
     final ids = msgNode.allMsgIdsFromRoot;
     return ids;
+  }
+
+  MsgNode _buildMsgNodeFromConversation(ConversationData conversation) {
+    return MsgNode.fromJson(
+      conversation.data,
+      createAtInUS: conversation.createdAtUS,
+    );
+  }
+
+  Future<bool> _deleteConversationByCreatedAtUS(int createdAtUS) async {
+    final db = P.app._db;
+    final allRelatedMsgIds = await _getAllMsgIdsFromConv(createdAtUS);
+    final success = await db.deleteConv(createdAtUS);
+    if (!success) {
+      return false;
+    }
+    await db.deleteMsgsByCreateAtInUS(allRelatedMsgIds);
+    return true;
+  }
+
+  void _clearLoadedConversationState() {
+    P.msg.ids.q = [];
+    P.msg.msgNode.q = MsgNode(0);
+    P.msg._clear();
+  }
+
+  void _clearCurrentConversationIfDeleted(Iterable<int> deletedConversationIds) {
+    final currentConversationId = currentCreatedAtUS.q;
+    if (currentConversationId == null) {
+      return;
+    }
+    if (!deletedConversationIds.contains(currentConversationId)) {
+      return;
+    }
+
+    _clearLoadedConversationState();
+    currentCreatedAtUS.q = null;
+  }
+
+  void _resetBatchSelection() {
+    isBatchMode.q = false;
+    selectedConversations.q = {};
+  }
+
+  List<Message> _orderMessagesFromNode(MsgNode msgNode, List<Message> messages) {
+    final orderedMessages = <Message>[];
+    final messageMap = {
+      for (final msg in messages) msg.id: msg,
+    };
+
+    void traverseNode(MsgNode node) {
+      final message = messageMap[node.id];
+      if (message != null) {
+        orderedMessages.add(message);
+      }
+      for (final child in node.children) {
+        traverseNode(child);
+      }
+    }
+
+    traverseNode(msgNode);
+    return orderedMessages;
+  }
+
+  String _formatConversationExportTime(S s, int? timeUS) {
+    if (timeUS == null) {
+      return s.unknown;
+    }
+
+    final dateTime = DateTime.fromMicrosecondsSinceEpoch(timeUS);
+    final year = dateTime.year;
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final second = dateTime.second.toString().padLeft(2, '0');
+    return '$year-$month-$day $hour:$minute:$second';
+  }
+
+  String _buildConversationExportContent({
+    required S s,
+    required ConversationData conversation,
+    required List<Message> orderedMessages,
+  }) {
+    final buffer = StringBuffer()
+      ..writeln(s.export_title)
+      ..writeln()
+      ..writeln(conversation.title)
+      ..writeln()
+      ..writeln('${s.created_at}: ${_formatConversationExportTime(s, conversation.createdAtUS)}')
+      ..writeln()
+      ..writeln('${s.updated_at}: ${_formatConversationExportTime(s, conversation.updatedAtUS)}')
+      ..writeln()
+      ..writeln('${s.message_content}:')
+      ..writeln();
+
+    for (final message in orderedMessages) {
+      final speaker = message.isMine ? s.user : s.assistant;
+      buffer
+        ..writeln(speaker)
+        ..writeln()
+        ..writeln(message.content)
+        ..writeln();
+    }
+
+    return buffer.toString().replaceAll(Config.batchMarker + "<", Config.batchMarker + "\n<").replaceAll(Config.batchMarker, "");
+  }
+
+  String _stripUserMessageTail(String content) {
+    return content.split(Config.userMsgModifierSep).first.trim();
+  }
+
+  String _firstBatchUserPrompt(List<Message> orderedMessages) {
+    for (final message in orderedMessages) {
+      if (!message.isMine) continue;
+      if (message.type != MessageType.text) continue;
+
+      final content = _stripUserMessageTail(message.content);
+      if (!getIsBatch(content)) continue;
+
+      final prompt = content.split(Config.batchMarker).first.trim();
+      if (prompt.isEmpty) continue;
+      return prompt;
+    }
+    return "";
+  }
+
+  String _truncateExportFileNameBase(String value) {
+    if (utf8.encode(value).length <= _Conversation._maxExportFileNameBaseBytes) {
+      return value;
+    }
+
+    final buffer = StringBuffer();
+    int bytes = 0;
+    for (final rune in value.runes) {
+      final char = String.fromCharCode(rune);
+      final charBytes = utf8.encode(char).length;
+      if (bytes + charBytes > _Conversation._maxExportFileNameBaseBytes) break;
+      buffer.write(char);
+      bytes += charBytes;
+    }
+
+    final truncated = buffer.toString().trimRight();
+    if (truncated.isEmpty) {
+      return _Conversation._fallbackExportFileNameBase;
+    }
+    return truncated;
+  }
+
+  String _sanitizeConversationExportFileNameBase(String value) {
+    final sanitized = value
+        .replaceAll(_Conversation._invalidExportFileNameChars, '_')
+        .replaceAll(_Conversation._blankExportFileNameChars, ' ')
+        .replaceAll(_Conversation._trailingExportFileNameChars, '')
+        .trim();
+    if (sanitized.isEmpty) {
+      return _Conversation._fallbackExportFileNameBase;
+    }
+    return _truncateExportFileNameBase(sanitized);
+  }
+
+  String _buildConversationExportFileNameBase({
+    required ConversationData conversation,
+    required List<Message> orderedMessages,
+  }) {
+    final firstBatchUserPrompt = _firstBatchUserPrompt(orderedMessages);
+    if (firstBatchUserPrompt.isNotEmpty) {
+      return _sanitizeConversationExportFileNameBase(firstBatchUserPrompt);
+    }
+    return _sanitizeConversationExportFileNameBase(conversation.title);
+  }
+
+  Future<File> _writeConversationExportFile({
+    required ConversationData conversation,
+    required List<Message> orderedMessages,
+    required String content,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileNameBase = _buildConversationExportFileNameBase(
+      conversation: conversation,
+      orderedMessages: orderedMessages,
+    );
+    final file = File(join(tempDir.path, '${fileNameBase}_$timestamp.txt'));
+    await file.writeAsString(content, encoding: utf8);
+    return file;
+  }
+
+  bool _shouldUseMessageForCurrentConvSubtitle(Message message) {
+    if (message.isMine) return false;
+    if (message.type != MessageType.text) return false;
+
+    final messages = P.msg.list.q.where((msg) => msg.type == MessageType.text).toList();
+    if (messages.length < 2) return false;
+    if (messages.length > 2) return false;
+
+    final botMessage = messages[1];
+    return botMessage.id == message.id;
   }
 }
 
@@ -90,45 +294,33 @@ extension $Conversation on _Conversation {
     qq;
     currentCreatedAtUS.q = conversation.createdAtUS;
     // Pager.toggle();
-    final msgNode = MsgNode.fromJson(
-      conversation.data,
-      createAtInUS: conversation.createdAtUS,
-    );
+    final msgNode = _buildMsgNodeFromConversation(conversation);
     final ids = msgNode.latestMsgIdsWithoutRoot;
     await P.msg._loadMessages(ids);
     P.msg.msgNode.q = msgNode;
     P.msg.ids.q = ids;
-    P.msg._loadMessages(msgNode.allMsgIdsFromRoot);
+    unawaited(P.msg._loadMessages(msgNode.allMsgIdsFromRoot));
     push(.chat);
   }
 
   Future<void> onDeleteClicked(BuildContext context, ConversationData conversation) async {
     qq;
-    if (P.rwkv.inTTSTranslateOrSee.q) return;
+    if (P.rwkvContext.inTTSTranslateOrSee.q) return;
 
-    final db = P.app._db;
     final createAtInUS = conversation.createdAtUS;
-
-    final allRelatedMsgIds = await _getAllMsgIdsFromConv(createAtInUS);
-    final success = await db.deleteConv(createAtInUS);
+    final success = await _deleteConversationByCreatedAtUS(createAtInUS);
     if (!success) {
-      qqe("delete conversation failed");
+      qqe('delete conversation failed: $createAtInUS');
       return;
     }
-    await load();
-    await db.deleteMsgsByCreateAtInUS(allRelatedMsgIds);
-    P.msg.ids.q = [];
-    P.msg.msgNode.q = MsgNode(0);
-    P.msg._clear();
 
-    if (currentCreatedAtUS.q == createAtInUS) {
-      currentCreatedAtUS.q = null;
-    }
+    await load();
+    _clearCurrentConversationIfDeleted({createAtInUS});
   }
 
   Future<void> onRenameClicked(BuildContext context, ConversationData conversation) async {
     qq;
-    if (P.rwkv.inTTSTranslateOrSee.q) return;
+    if (P.rwkvContext.inTTSTranslateOrSee.q) return;
 
     final s = S.of(context);
     final currentTitle = conversation.title;
@@ -165,19 +357,42 @@ extension $Conversation on _Conversation {
     await P.conversation.load();
   }
 
-  void updateCurrentConvSubtitle(String subtitle) async {
-    if (P.rwkv.inTTSTranslateOrSee.q) return;
-    final id = P.conversation.currentCreatedAtUS.q;
-    if (id == null) {
+  Future<void> updateCurrentConvSubtitle(String subtitle, {bool force = false}) async {
+    if (P.rwkvContext.inTTSTranslateOrSee.q) return;
+    final currentConversationId = currentCreatedAtUS.q;
+    if (currentConversationId == null) {
       return;
     }
-    final c = P.conversation.conversations.q.firstWhereOrNull((e) => e.createdAtUS == id);
-    if (c == null) return;
-    if (c.subtitle != null && c.subtitle!.length > 100) {
+
+    final conversation = conversations.q.firstWhereOrNull((item) => item.createdAtUS == currentConversationId);
+    if (conversation == null) return;
+    if (!force && (conversation.subtitle?.length ?? 0) > 100) {
       return;
     }
-    P.app._db.updateConv(id, subtitle: subtitle);
-    await P.conversation.load();
+    if (conversation.subtitle == subtitle) {
+      return;
+    }
+
+    try {
+      await P.app._db.updateConv(currentConversationId, subtitle: subtitle);
+      await load();
+    } catch (e, stackTrace) {
+      qqe('update conversation subtitle failed: $e');
+      Sentry.captureException(e, stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> updateCurrentConvSubtitleFromResponseContent(String content, {int? selectedBatch, bool force = false}) async {
+    final subtitle = buildConversationSubtitleFromResponseContent(content, selectedBatch: selectedBatch);
+    if (subtitle.isEmpty) return;
+    await updateCurrentConvSubtitle(subtitle, force: force);
+  }
+
+  Future<void> updateCurrentConvSubtitleFromMessage(Message message, {int? selectedBatch, String? contentOverride}) async {
+    if (!_shouldUseMessageForCurrentConvSubtitle(message)) return;
+
+    final content = contentOverride != null && contentOverride.isNotEmpty ? contentOverride : message.content;
+    await updateCurrentConvSubtitleFromResponseContent(content, selectedBatch: selectedBatch, force: true);
   }
 
   /// 将 conversation 导出为 .txt 文件
@@ -207,82 +422,35 @@ extension $Conversation on _Conversation {
   /// context
   Future<void> onExportClicked(BuildContext context, ConversationData conversation) async {
     qq;
-    if (P.rwkv.inTTSTranslateOrSee.q) return;
+    if (P.rwkvContext.inTTSTranslateOrSee.q) return;
     final s = S.of(context);
-    try {
-      // 1. 从ConversationData转成MsgNode获取所有消息ID
-      final msgNode = MsgNode.fromJson(
-        conversation.data,
-        createAtInUS: conversation.createdAtUS,
-      );
-      final allMsgIds = msgNode.allMsgIdsFromRoot;
 
+    try {
+      final msgNode = _buildMsgNodeFromConversation(conversation);
+      final allMsgIds = msgNode.allMsgIdsFromRoot;
       if (allMsgIds.isEmpty) {
         Alert.warning(s.no_message_to_export);
         return;
       }
 
-      // 2. 从数据库查询所有消息
       final db = P.app._db;
       final messages = await db.getMessagesByIds(allMsgIds);
-
-      // 3. 按照消息树的顺序排序消息
-      final orderedMessages = <Message>[];
-      final messageMap = {for (var msg in messages) msg.id: msg};
-
-      // 使用深度优先遍历获取正确的消息顺序
-      void traverseNode(MsgNode node) {
-        if (node.id != 0 && messageMap.containsKey(node.id)) {
-          orderedMessages.add(messageMap[node.id]!);
-        }
-        for (var child in node.children) {
-          traverseNode(child);
-        }
+      final orderedMessages = _orderMessagesFromNode(msgNode, messages);
+      if (orderedMessages.isEmpty) {
+        Alert.warning(s.no_message_to_export);
+        return;
       }
 
-      traverseNode(msgNode);
-
-      // 4. 格式化时间
-      String formatTime(int? timeUS) {
-        if (timeUS == null) return s.unknown;
-        final dateTime = DateTime.fromMicrosecondsSinceEpoch(timeUS);
-        return "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}";
-      }
-
-      // 5. 构建文件内容
-      final buffer = StringBuffer();
-      buffer.writeln(s.export_title);
-      buffer.writeln();
-      buffer.writeln(conversation.title);
-      buffer.writeln();
-      buffer.writeln("${s.created_at}: ${formatTime(conversation.createdAtUS)}");
-      buffer.writeln();
-      buffer.writeln("${s.updated_at}: ${formatTime(conversation.updatedAtUS)}");
-      buffer.writeln();
-      buffer.writeln("${s.message_content}:");
-      buffer.writeln();
-
-      for (final message in orderedMessages) {
-        if (message.isMine) {
-          buffer.writeln(s.user);
-          buffer.writeln();
-          buffer.writeln(message.content);
-        } else {
-          buffer.writeln(s.assistant);
-          buffer.writeln();
-          buffer.writeln(message.content);
-        }
-        buffer.writeln();
-      }
-
-      // 6. 创建文件
-      final tempDir = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = "${conversation.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')}_$timestamp.txt";
-      final file = File('${tempDir.path}/$fileName');
-      await file.writeAsString(buffer.toString(), encoding: utf8);
-
-      // 7. 分享文件
+      final content = _buildConversationExportContent(
+        s: s,
+        conversation: conversation,
+        orderedMessages: orderedMessages,
+      );
+      final file = await _writeConversationExportFile(
+        conversation: conversation,
+        orderedMessages: orderedMessages,
+        content: content,
+      );
       final xFile = XFile(file.path, mimeType: 'text/plain');
       await SharePlus.instance.share(
         ShareParams(
@@ -291,8 +459,9 @@ extension $Conversation on _Conversation {
           title: conversation.title,
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       qqe("Export conversation failed: $e");
+      Sentry.captureException(e, stackTrace: stackTrace);
       Alert.error(s.export_conversation_failed);
     }
   }
@@ -300,10 +469,12 @@ extension $Conversation on _Conversation {
   // 批量选择相关方法
   void toggleBatchMode() {
     qq;
-    isBatchMode.q = !isBatchMode.q;
-    if (!isBatchMode.q) {
-      selectedConversations.q = {};
+    if (isBatchMode.q) {
+      _resetBatchSelection();
+      return;
     }
+
+    isBatchMode.q = true;
   }
 
   void toggleConversationSelection(int createdAtUS) {
@@ -334,17 +505,17 @@ extension $Conversation on _Conversation {
 
   Future<void> deleteSelectedConversations(BuildContext context) async {
     qq;
-    if (P.rwkv.inTTSTranslateOrSee.q) return;
+    if (P.rwkvContext.inTTSTranslateOrSee.q) return;
 
     final s = S.of(context);
-    final selectedIds = selectedConversations.q;
+    final selectedIds = Set<int>.from(selectedConversations.q);
 
     if (selectedIds.isEmpty) return;
 
     final result = await showOkCancelAlertDialog(
       context: context,
       title: s.delete_conversation,
-      message: '确定要删除 ${selectedIds.length} 个对话吗？',
+      message: s.delete_conversations_message(selectedIds.length),
       okLabel: s.delete,
       cancelLabel: s.cancel,
       isDestructiveAction: true,
@@ -353,30 +524,20 @@ extension $Conversation on _Conversation {
     if (result != OkCancelResult.ok) return;
 
     try {
-      final db = P.app._db;
-
       for (final createdAtUS in selectedIds) {
-        final allRelatedMsgIds = await _getAllMsgIdsFromConv(createdAtUS);
-        await db.deleteConv(createdAtUS);
-        await db.deleteMsgsByCreateAtInUS(allRelatedMsgIds);
+        final success = await _deleteConversationByCreatedAtUS(createdAtUS);
+        if (!success) {
+          throw StateError('delete conversation failed: $createdAtUS');
+        }
       }
 
       await load();
-
-      // 清除当前对话状态如果被删除的对话是当前对话
-      if (selectedIds.contains(currentCreatedAtUS.q)) {
-        P.msg.ids.q = [];
-        P.msg.msgNode.q = MsgNode(0);
-        P.msg._clear();
-        currentCreatedAtUS.q = null;
-      }
-
-      // 退出批量模式
-      isBatchMode.q = false;
-      selectedConversations.q = {};
-    } catch (e) {
+      _clearCurrentConversationIfDeleted(selectedIds);
+      _resetBatchSelection();
+    } catch (e, stackTrace) {
       qqe("Batch delete conversations failed: $e");
-      Alert.error('删除对话失败');
+      Sentry.captureException(e, stackTrace: stackTrace);
+      Alert.error(s.delete_conversations_failed);
     }
   }
 }

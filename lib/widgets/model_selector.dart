@@ -306,7 +306,7 @@ class _ModelsInConfigFile extends ConsumerWidget {
             .where((e) => e.available)
             .expand(
               (e) => e.socPairs
-                  .where((pair) => pair.$1.isEmpty || pair.$1 == P.rwkv.socName.q)
+                  .where((pair) => pair.$1.isEmpty || pair.$1 == P.rwkvBackend.socName.q)
                   .sortedBy<num>((pair) => -pair.$1.length)
                   .map((pair) => WorldGroupItem(e, socPair: pair)),
             )
@@ -340,24 +340,24 @@ class _ModelsInConfigFile extends ConsumerWidget {
   ///
   /// 只要没用 CPU 就排前面
   int _compare(FileInfo a, FileInfo b) {
-    final aHasCoreML = a.tags.contains("coreml");
-    final bHasCoreML = b.tags.contains("coreml");
+    final aHasCoreML = a.hasEffectiveTag("coreml");
+    final bHasCoreML = b.hasEffectiveTag("coreml");
     if (aHasCoreML != bHasCoreML) return aHasCoreML ? -1 : 1;
 
-    final aHasMLX = a.tags.contains("mlx");
-    final bHasMLX = b.tags.contains("mlx");
+    final aHasMLX = a.hasEffectiveTag("mlx");
+    final bHasMLX = b.hasEffectiveTag("mlx");
     if (aHasMLX != bHasMLX) return aHasMLX ? -1 : 1;
 
-    final aHasNpu = a.tags.contains("npu");
-    final bHasNpu = b.tags.contains("npu");
+    final aHasNpu = a.hasEffectiveTag("npu");
+    final bHasNpu = b.hasEffectiveTag("npu");
     if (aHasNpu != bHasNpu) return aHasNpu ? -1 : 1;
 
-    final aHasGpu = a.tags.contains("gpu");
-    final bHasGpu = b.tags.contains("gpu");
+    final aHasGpu = a.hasEffectiveTag("gpu");
+    final bHasGpu = b.hasEffectiveTag("gpu");
     if (aHasGpu != bHasGpu) return aHasGpu ? -1 : 1;
 
-    final aHasWebRWKV = a.tags.contains("webRwkv");
-    final bHasWebRWKV = b.tags.contains("webRwkv");
+    final aHasWebRWKV = a.hasEffectiveTag("webRwkv");
+    final bHasWebRWKV = b.hasEffectiveTag("webRwkv");
     if (aHasWebRWKV != bHasWebRWKV) return aHasWebRWKV ? -1 : 1;
 
     return (b.modelSize ?? 0).compareTo(a.modelSize ?? 0);
@@ -380,8 +380,8 @@ class _NpuNotSupportedHintState extends ConsumerState<_NpuNotSupportedHint> {
     final qb = ref.watch(P.app.qb);
     final primary = Theme.of(context).colorScheme.primary;
     final supportedNpus = P.remote.getSupportedNpuChips;
-    final currentSocName = ref.watch(P.rwkv.socName);
-    final frontendSocName = ref.watch(P.rwkv.frontendSocName);
+    final currentSocName = ref.watch(P.rwkvBackend.socName);
+    final frontendSocName = ref.watch(P.rwkvBackend.frontendSocName);
 
     if (supportedNpus.isEmpty) return const SizedBox.shrink();
 
@@ -539,11 +539,10 @@ class _ModelsInConfigDownloadSource extends ConsumerWidget {
         Wrap(
           runSpacing: 4,
           spacing: 4,
-          children: FileDownloadSource.values
-              .where((e) {
+          children:
+              (FileDownloadSource.values.where((e) {
                 return (kDebugMode || !e.isDebug) && !e.hidden;
-              })
-              .map((e) {
+              }).toList()..sort((a, b) => a.displayOrder.compareTo(b.displayOrder))).map((e) {
                 String downloadSourceName = e.name;
                 if (currentLangIsZh) {
                   downloadSourceName += (e == FileDownloadSource.huggingface ? S.current.overseas : "");
@@ -572,8 +571,7 @@ class _ModelsInConfigDownloadSource extends ConsumerWidget {
                     ),
                   ),
                 );
-              })
-              .toList(),
+              }).toList(),
         ),
       ],
     );
@@ -598,10 +596,10 @@ class _LocalPthFileItem extends ConsumerWidget {
     final s = S.of(context);
     ref.watch(P.app.theme);
     final appTheme = ref.watch(P.app.theme);
-    final currentModel = ref.watch(P.rwkv.latestModel);
+    final currentModel = ref.watch(P.rwkvModel.latest);
     final isCurrent = currentModel == fileInfo;
-    final loadingStatus = ref.watch(P.rwkv.loadingStatus);
-    final loadingProgress = ref.watch(P.rwkv.loadingProgress);
+    final loadingStatus = ref.watch(P.rwkvModel.loadingStatus);
+    final loadingProgress = ref.watch(P.rwkvModel.loadingProgress);
 
     final loading =
         loadingStatus[fileInfo] == LoadingStatus.loading ||

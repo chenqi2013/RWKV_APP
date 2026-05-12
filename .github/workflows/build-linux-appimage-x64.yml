@@ -1,0 +1,280 @@
+name: Linux x64 AppImage
+
+run-name: ${{ github.ref_name }} Linux x64 AppImage
+
+on:
+  push:
+    tags:
+      - "[0-9]*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to build and publish, for example 4.4.7"
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      build_number: ${{ steps.meta.outputs.build_number }}
+      appimage_name: ${{ steps.meta.outputs.appimage_name }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      should_publish: ${{ steps.meta.outputs.should_publish }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+          sparse-checkout: pubspec.yaml
+          sparse-checkout-cone-mode: false
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          VERSION_LINE=$(grep "^version:" pubspec.yaml)
+          VERSION=$(echo "$VERSION_LINE" | sed 's/version: //' | sed 's/+.*//')
+          BUILD_NUMBER=$(echo "$VERSION_LINE" | sed 's/.*+//')
+          if [ -z "$BUILD_NUMBER" ]; then BUILD_NUMBER="1"; fi
+
+          APPIMAGE_NAME="rwkv_chat_${VERSION}_${BUILD_NUMBER}_linux-x64.AppImage"
+          MANUAL_RELEASE_TAG="${{ inputs.release_tag }}"
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            RELEASE_TAG="$GITHUB_REF_NAME"
+            SHOULD_PUBLISH="true"
+          elif [ -n "$MANUAL_RELEASE_TAG" ]; then
+            RELEASE_TAG="$MANUAL_RELEASE_TAG"
+            SHOULD_PUBLISH="true"
+          else
+            RELEASE_TAG=""
+            SHOULD_PUBLISH="false"
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "appimage_name=$APPIMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "should_publish=$SHOULD_PUBLISH" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build AppImage
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+
+      - name: Checkout rwkv_mobile_flutter dependency
+        uses: actions/checkout@v4
+        with:
+          repository: MollySophia/rwkv_mobile_flutter
+          ref: dev
+          path: rwkv_mobile_flutter
+          fetch-depth: 1
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.6"
+          channel: "stable"
+          cache: true
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libcurl4-openssl-dev \
+            desktop-file-utils
+
+      - name: Override dependency path
+        run: |
+          echo "dependency_overrides:" > pubspec_overrides.yaml
+            echo "  proxy_setting_android:" >> pubspec_overrides.yaml
+            echo "    git:" >> pubspec_overrides.yaml
+            echo "      url: https://github.com/dengzii/proxy_setting.git" >> pubspec_overrides.yaml
+            echo "      path: packages/proxy_setting_android" >> pubspec_overrides.yaml
+            echo "      ref: main" >> pubspec_overrides.yaml
+            echo "  rwkv_downloader:" >> pubspec_overrides.yaml
+            echo "    git:" >> pubspec_overrides.yaml
+            echo "      url: https://github.com/RWKV-APP/rwkv_downloader.git" >> pubspec_overrides.yaml
+            echo "      ref: v1" >> pubspec_overrides.yaml
+            echo "  rwkv_mobile_flutter:" >> pubspec_overrides.yaml
+            echo "    path: ./rwkv_mobile_flutter" >> pubspec_overrides.yaml
+
+      - name: Create .env file
+        uses: ./.github/actions/create-env
+        with:
+          x_api_key: ${{ secrets.X_API_KEY }}
+
+      - name: Decrypt sensitive assets
+        uses: ./.github/actions/decrypt-assets
+        with:
+          filter_decrypt_pass: ${{ secrets.FILTER_DECRYPT_PASS }}
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify Flutter setup
+        run: flutter doctor -v
+
+      - name: Build Linux x64
+        run: >
+          flutter build linux
+          --release
+          --target-platform linux-x64
+          --split-debug-info=build/sentry-symbols/linux-x64
+          --dart-define=SENTRY_RELEASE=rwkv-chat@${{ needs.setup.outputs.version }}+${{ needs.setup.outputs.build_number }}
+          --dart-define=SENTRY_DIST=${{ needs.setup.outputs.build_number }}
+
+      - name: Remove aarch64 libraries
+        run: |
+          LIB_DIR="build/linux/x64/release/bundle/lib"
+          if [ -d "$LIB_DIR" ]; then
+            REMOVED_COUNT=0
+            for file in "$LIB_DIR"/*aarch64*.so "$LIB_DIR"/*arm64*.so; do
+              if [ -f "$file" ]; then
+                echo "Removing: $(basename "$file")"
+                rm -f "$file"
+                REMOVED_COUNT=$((REMOVED_COUNT + 1))
+              fi
+            done
+            echo "Removed $REMOVED_COUNT aarch64 library file(s)"
+          fi
+
+      - name: Upload Sentry debug files
+        if: needs.setup.outputs.should_publish == 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "SENTRY_AUTH_TOKEN secret is required for Sentry symbol upload" >&2
+            exit 1
+          fi
+          dart run sentry_dart_plugin \
+            --sentry-define=symbols_path=build/sentry-symbols/linux-x64 \
+            --sentry-define=release=rwkv-chat@${{ needs.setup.outputs.version }}+${{ needs.setup.outputs.build_number }} \
+            --sentry-define=dist=${{ needs.setup.outputs.build_number }}
+
+      - name: Create AppImage
+        id: create-appimage
+        env:
+          APPIMAGE_NAME: ${{ needs.setup.outputs.appimage_name }}
+          VERSION: ${{ needs.setup.outputs.version }}
+        run: |
+          BUNDLE_DIR="$GITHUB_WORKSPACE/build/linux/x64/release/bundle"
+          APPDIR="$GITHUB_WORKSPACE/build/appimage/RWKVChat.AppDir"
+          TOOL_DIR="$GITHUB_WORKSPACE/build/appimage-tools"
+          APPIMAGETOOL="$TOOL_DIR/appimagetool-x86_64.AppImage"
+
+          rm -rf "$APPDIR" "$TOOL_DIR"
+          mkdir -p "$APPDIR" "$TOOL_DIR"
+          cp -a "$BUNDLE_DIR"/. "$APPDIR"/
+          ln -s rwkv_chat "$APPDIR/AppRun"
+
+          cat > "$APPDIR/com.rwkvzone.chat.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=RWKV Chat
+          Comment=Run RWKV models locally
+          Exec=rwkv_chat
+          Icon=com.rwkvzone.chat
+          Categories=Utility;
+          Terminal=false
+          EOF
+
+          cp assets/img/chat/logo.square.png "$APPDIR/com.rwkvzone.chat.png"
+          desktop-file-validate "$APPDIR/com.rwkvzone.chat.desktop"
+
+          wget -q -O "$APPIMAGETOOL" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x "$APPIMAGETOOL"
+
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 VERSION="$VERSION" \
+            "$APPIMAGETOOL" "$APPDIR" "$GITHUB_WORKSPACE/$APPIMAGE_NAME"
+          chmod +x "$GITHUB_WORKSPACE/$APPIMAGE_NAME"
+
+          echo "appimage_path=$GITHUB_WORKSPACE/$APPIMAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-appimage
+          path: ${{ steps.create-appimage.outputs.appimage_path }}
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [setup, build]
+    if: needs.setup.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x64-appimage
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.setup.outputs.release_tag }}
+          generate_release_notes: false
+          files: "*.AppImage"
+
+  upload-hf:
+    name: Upload to HuggingFace
+    needs: [setup, build]
+    if: needs.setup.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout upload script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/upload_to_hf.py
+          sparse-checkout-cone-mode: false
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x64-appimage
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install huggingface_hub
+
+      - name: Upload to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_ENDPOINT: ${{ secrets.HF_ENDPOINT || 'https://huggingface.co' }}
+          HF_DATASETS_ID: ${{ secrets.HF_DATASETS_ID || 'HaloWang/rwkv-chat' }}
+          APPIMAGE_NAME: ${{ needs.setup.outputs.appimage_name }}
+        run: |
+          python scripts/upload_to_hf.py \
+            --repo-id "$HF_DATASETS_ID" \
+            --file "$APPIMAGE_NAME" \
+            --path-in-repo "linux-x64/$APPIMAGE_NAME" \
+            --hf-token "$HF_TOKEN" \
+            --hf-endpoint "$HF_ENDPOINT"

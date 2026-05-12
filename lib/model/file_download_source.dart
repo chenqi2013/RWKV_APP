@@ -1,6 +1,7 @@
 enum FileDownloadSource {
   aifasthub,
   hfmirror,
+  modelscope,
   huggingface,
   github,
   googleapis
@@ -9,6 +10,7 @@ enum FileDownloadSource {
   String get prefix => switch (this) {
     aifasthub => 'https://aifasthub.com/',
     hfmirror => 'https://hf-mirror.com/',
+    modelscope => 'https://modelscope.cn/',
     huggingface => 'https://huggingface.co/',
     github => 'https://github.com/',
     googleapis => 'https://googleapis.com/',
@@ -17,6 +19,7 @@ enum FileDownloadSource {
   String get suffix => switch (this) {
     aifasthub => '?download=true',
     hfmirror => '?download=true',
+    modelscope => '',
     huggingface => '',
     github => '',
     googleapis => '',
@@ -26,6 +29,7 @@ enum FileDownloadSource {
     huggingface => false,
     hfmirror => false,
     aifasthub => false,
+    modelscope => false,
     github => true,
     googleapis => true,
   };
@@ -34,5 +38,19 @@ enum FileDownloadSource {
     github => true,
     googleapis => true,
     _ => false,
+  };
+
+  int get displayOrder => switch (this) {
+    modelscope => 0,
+    aifasthub => 1,
+    hfmirror => 2,
+    huggingface => 3,
+    github => 4,
+    googleapis => 5,
+  };
+
+  String transformRaw(String raw) => switch (this) {
+    modelscope => raw.replaceFirst('mollysama/rwkv-mobile-models/resolve/main/', 'models/RWKV/rwkv-mobile-models/resolve/master/'),
+    _ => raw,
   };
 }

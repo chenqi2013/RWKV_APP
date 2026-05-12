@@ -164,7 +164,7 @@ class _Suggestion {
 
   List<dynamic> _seeSuggestions(Ref ref) {
     final config = ref.watch(this.config);
-    final currentWorldType = ref.watch(P.rwkv.currentWorldType);
+    final currentWorldType = ref.watch(P.rwkvContext.currentWorldType);
 
     switch (currentWorldType) {
       case WorldType.reasoningQA:
@@ -183,12 +183,12 @@ class _Suggestion {
 
   final worldSuggestion = qp<List<String>>((ref) {
     final _ = ref.watch(P.suggestion.ttsTicker);
-    final _ = ref.watch(P.rwkv.latestModel);
+    final _ = ref.watch(P.rwkvModel.latest);
     final _ = ref.watch(P.msg.length);
 
     final config = ref.watch(P.suggestion.config);
 
-    final currentWorldType = ref.watch(P.rwkv.currentWorldType);
+    final currentWorldType = ref.watch(P.rwkvContext.currentWorldType);
 
     switch (currentWorldType) {
       case WorldType.reasoningQA:
@@ -205,7 +205,7 @@ class _Suggestion {
 
   final talkSuggestion = qp<List<String>>((ref) {
     final _ = ref.watch(P.suggestion.ttsTicker);
-    final _ = ref.watch(P.rwkv.latestModel);
+    final _ = ref.watch(P.rwkvModel.latest);
     final _ = ref.watch(P.msg.length);
 
     final config = ref.watch(P.suggestion.config);
@@ -389,13 +389,38 @@ extension _$Suggestion on _Suggestion {
 
   void _onPageKeyChanged(PageKey pageKey) {
     if (pageKey != .chat && pageKey != .neko) return;
-    if (chatSuggestions.q.isNotEmpty) return;
     unawaited(loadSuggestions(forceChatMode: true));
   }
 }
 
 /// Public methods
 extension $Suggestion on _Suggestion {
+  List<String> pickRandomChatPrompts(
+    int count, {
+    List<String> exclude = const <String>[],
+  }) {
+    final excludeSet = exclude.map(_normalizePromptDedupeKey).where((item) => item.isNotEmpty).toSet();
+    final seen = <String>{};
+    final prompts = <String>[];
+    final pool = <Suggestion>[
+      if (useHighScoreApi.q && highScoreTopSuggestions.q.isNotEmpty) ...highScoreTopSuggestions.q,
+      ...config.q.chat.expand((category) => category.items),
+    ].shuffled;
+
+    for (final suggestion in pool) {
+      final prompt = suggestion.prompt.trim();
+      if (prompt.isEmpty) continue;
+      final dedupeKey = _normalizePromptDedupeKey(prompt);
+      if (excludeSet.contains(dedupeKey)) continue;
+      if (seen.contains(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      prompts.add(prompt);
+      if (prompts.length >= count) return prompts;
+    }
+
+    return prompts;
+  }
+
   void refreshChatSuggestions() {
     final useHighScore = useHighScoreApi.q;
     if (useHighScore) {
@@ -405,6 +430,10 @@ extension $Suggestion on _Suggestion {
     }
     chatSuggestions.q = _pickChatSuggestionsByCategory(config.q.chat);
   }
+}
+
+String _normalizePromptDedupeKey(String value) {
+  return value.trim().replaceAll(RegExp(r'\s+'), ' ');
 }
 
 List<SuggestionCategory> _buildHighScoreChatSuggestionCategories(

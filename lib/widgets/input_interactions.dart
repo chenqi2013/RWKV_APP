@@ -11,10 +11,10 @@ import 'package:zone/store/p.dart';
 import 'package:zone/widgets/chat/ask_question_button.dart';
 import 'package:zone/widgets/chat/batch_button.dart';
 import 'package:zone/widgets/chat/decode_param_button.dart';
+import 'package:zone/widgets/chat/response_style_button.dart';
 import 'package:zone/widgets/chat/secondary_options_button.dart';
 import 'package:zone/widgets/chat/thinking_mode_button.dart';
 import 'package:zone/widgets/chat/web_search_mode_button.dart';
-import 'package:zone/widgets/chat/wen_yan_wen_button.dart';
 
 class InputInteractions extends ConsumerWidget {
   final DemoType preferredDemoType;
@@ -47,8 +47,8 @@ class _ItemList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final features = ref.watch(P.app.featureRollout);
     final currentLangIsZh = ref.watch(P.preference.currentLangIsZh);
-    final currentModelIsBefore20250922 = ref.watch(P.rwkv.currentModelIsBefore20250922);
-    final isAlbatrossLoaded = ref.watch(P.rwkv.isAlbatrossLoaded);
+    final currentModelIsBefore20250922 = ref.watch(P.rwkvParams.currentModelIsBefore20250922);
+    final isAlbatrossLoaded = ref.watch(P.rwkvContext.isAlbatrossLoaded);
 
     final children = [
       if (features.webSearch && preferredDemoType == .chat) const WebSearchModeButton(),
@@ -57,7 +57,7 @@ class _ItemList extends ConsumerWidget {
         const SecondaryOptionsButton(),
       if (preferredDemoType == .chat) const ThinkingModeButton(),
       if (!isAlbatrossLoaded && preferredDemoType == .chat) const BatchButton(),
-      if (preferredDemoType == .chat && currentLangIsZh) const WenYanWenButton(),
+      if (preferredDemoType == .chat && currentLangIsZh) const ResponseStyleButton(),
       if (preferredDemoType == .chat) const AskQuestionButton(),
     ];
 

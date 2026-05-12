@@ -140,17 +140,17 @@ class _HorizontalFloatingAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return const Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           flex: 3,
           child: Align(
             alignment: .bottomCenter,
-            child: const _BottomActions(),
+            child: _BottomActions(),
           ),
         ),
-        const Expanded(
+        Expanded(
           flex: 2,
           child: SizedBox(),
         ),
@@ -168,6 +168,7 @@ class _BottomActions extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final decodeParamForegroundColor = isDark ? Colors.white : Colors.black;
     final decodeParamBackgroundColor = isDark ? Colors.transparent : Colors.white;
+
     final decodeParamButtonStyle = FilledButton.styleFrom(
       minimumSize: const Size(0, 50),
       padding: const EdgeInsets.symmetric(horizontal: 12),

@@ -47,7 +47,7 @@ class BotMessageBottom extends ConsumerWidget {
 
   void _onSharePressed() {
     if (disableDefaultActions) return;
-    if (P.rwkv.generating.q) {
+    if (P.rwkvGeneration.generating.q) {
       P.chat.onStopButtonPressed();
     }
 
@@ -133,6 +133,7 @@ class BotMessageBottom extends ConsumerWidget {
     if (msg.isMine) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
+    final appTheme = ref.watch(P.app.theme);
     final s = S.of(context);
 
     final demoType = preferredDemoType ?? ref.watch(P.app.demoType);
@@ -149,7 +150,7 @@ class BotMessageBottom extends ConsumerWidget {
 
     final primaryColor = theme.colorScheme.primary;
 
-    final worldType = ref.watch(P.rwkv.currentWorldType);
+    final worldType = ref.watch(P.rwkvContext.currentWorldType);
 
     bool showEditButton = true;
     bool showCopyButton = true;
@@ -219,7 +220,7 @@ class BotMessageBottom extends ConsumerWidget {
     const actionAnimDuration = Duration(milliseconds: 200);
     const Curve actionAnimCurve = Curves.easeOutCubic;
     final resumeMatched = disableDefaultActions ? true : receiveId == msg.id;
-    final showResumeAction = showResumeButton && paused && resumeMatched && !isBatch;
+    final showResumeAction = showResumeButton && paused && resumeMatched;
     final showEditAction = showEditButton && !changing;
     ref.watch(P.msg.msgNode);
 
@@ -241,12 +242,10 @@ class BotMessageBottom extends ConsumerWidget {
     final messageTokenCountText = resolvedMessageTokenCount?.toString() ?? (msg.changing ? s.generating : "--");
     final contextTokenCountText = resolvedConversationTokenCount?.toString() ?? (msg.changing ? s.generating : "--");
 
-    final int effectiveBatchCount = ref.watch(P.chat.batchEnabled) ? ref.watch(P.chat.batchCount) : 1;
+    final int effectiveBatchCount = ref.watch(P.chat.effectiveBatchEnabled) ? ref.watch(P.chat.effectiveBatchCount) : 1;
     final int tokenThreshold = Config.newConversationTokenReminderThreshold * effectiveBatchCount;
     final showConversationTokenLimitHint =
-        !msg.changing &&
-        resolvedConversationTokenCount != null &&
-        resolvedConversationTokenCount >= tokenThreshold;
+        !msg.changing && resolvedConversationTokenCount != null && resolvedConversationTokenCount >= tokenThreshold;
     final isInlineTokenGenerating = messageTokenCountText == s.generating || contextTokenCountText == s.generating;
 
     final inlineConversationTokenCoreText = isInlineTokenGenerating ? s.generating : "$messageTokenCountText/$contextTokenCountText tok";
@@ -255,8 +254,8 @@ class BotMessageBottom extends ConsumerWidget {
         ? "$inlineConversationTokenCoreText · ${s.conversation_token_limit_hint_short}"
         : inlineConversationTokenCoreText;
 
-    final livePrefillSpeed = ref.watch(P.rwkv.prefillSpeed);
-    final liveDecodeSpeed = ref.watch(P.rwkv.decodeSpeed);
+    final livePrefillSpeed = ref.watch(P.rwkvGeneration.prefillSpeed);
+    final liveDecodeSpeed = ref.watch(P.rwkvGeneration.decodeSpeed);
     final effectiveLivePrefillSpeed = livePrefillSpeed > 0 ? livePrefillSpeed : (msg.prefillSpeed ?? .0);
     final effectiveLiveDecodeSpeed = liveDecodeSpeed > 0 ? liveDecodeSpeed : (msg.decodeSpeed ?? .0);
     final changingInlinePrefillSpeedText = _formatCompactSpeed(speed: effectiveLivePrefillSpeed);
@@ -269,14 +268,14 @@ class BotMessageBottom extends ConsumerWidget {
     final detailsDecodeSpeedDisplay = detailsDecodeSpeedText == "--" ? "--" : "$detailsDecodeSpeedText t/s";
 
     final parsedDecodeParams = msg.parsedDecodeParams;
-    final currentDecodeParamType = ref.watch(P.rwkv.decodeParamType);
+    final currentDecodeParamType = ref.watch(P.rwkvParams.decodeParamType);
     final currentDecodeParamDisplayName = SamplerAndPenaltyParam.fromDecodeParamType(currentDecodeParamType).displayName;
     String? decodeParamSummary = _localizedDecodeParamSummary(parsedDecodeParams: parsedDecodeParams);
     if (decodeParamSummary == null && (msg.changing || msg.paused || receiveId == msg.id)) {
       decodeParamSummary = currentDecodeParamDisplayName;
     }
-    final latestModel = ref.watch(P.rwkv.latestModel);
-    final currentGroupInfo = ref.watch(P.rwkv.currentGroupInfo);
+    final latestModel = ref.watch(P.rwkvModel.latest);
+    final currentGroupInfo = ref.watch(P.rwkvContext.currentGroupInfo);
     final liveModelName = isTTSDemo ? (latestModel?.name ?? currentGroupInfo?.displayName) : null;
     final modelNameText = msg.modelName?.isNotEmpty == true ? msg.modelName! : (liveModelName ?? "--");
     final showChangingPrefillProgress = changing && !isTTSDemo;
@@ -546,24 +545,27 @@ class BotMessageBottom extends ConsumerWidget {
               ),
             ),
           if (showResumeAction)
-            KeyedSubtree(
-              key: const ValueKey<String>("resume"),
-              child: Tooltip(
-                message: s.chat_resume,
-                child: GestureDetector(
-                  onTap: _onResumePressed,
-                  child: Container(
-                    padding: .zero,
+            Padding(
+              padding: .only(right: isBatch ? 8 : 0),
+              child: KeyedSubtree(
+                key: const ValueKey<String>("resume"),
+                child: Tooltip(
+                  message: s.chat_resume,
+                  child: GestureDetector(
+                    onTap: _onResumePressed,
                     child: Container(
-                      padding: const .symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                        border: .all(color: primaryColor.q(.67)),
-                        borderRadius: .circular(4),
-                      ),
-                      child: Text(
-                        s.chat_resume,
-                        style: TS(c: primaryColor, w: .w600, s: 16),
+                      padding: .zero,
+                      child: Container(
+                        padding: const .symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          border: .all(color: primaryColor.q(.67)),
+                          borderRadius: .circular(4),
+                        ),
+                        child: Text(
+                          s.chat_resume,
+                          style: TS(c: primaryColor, w: .w600, s: 16),
+                        ),
                       ),
                     ),
                   ),
@@ -597,7 +599,10 @@ class BotMessageBottom extends ConsumerWidget {
         });
 
     return Padding(
-      padding: .only(top: isMobile ? .0 : 8.0),
+      padding: .only(
+        top: isMobile ? .0 : 8.0,
+        left: (isBatch) ? appTheme.msgListMarginLeft : 0,
+      ),
       child: Column(
         crossAxisAlignment: .start,
         children: [
@@ -719,7 +724,7 @@ class _ChangingPrefillProgressInline extends ConsumerWidget {
     final theme = Theme.of(context);
     if (!changing) return const SizedBox.shrink();
 
-    final progress = ref.watch(P.rwkv.prefillProgress).clamp(0, 1).toDouble();
+    final progress = ref.watch(P.rwkvGeneration.prefillProgress).clamp(0, 1).toDouble();
     final percent = _percentValue(progress: progress);
     if (percent >= 100) return const SizedBox.shrink();
 

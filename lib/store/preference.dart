@@ -6,6 +6,10 @@ const String _debugRenderSpaceSymbolPreferenceKey = "halo_state.debug.renderSpac
 const String _legacyDebugRenderSpaceSymbolPreferenceKey = "halo_state.debug.showSpaceSymbols";
 const String _debugShowPrefillLogOnlyPreferenceKey = "halo_state.debug.showPrefillLogOnly";
 const String _messageLineHeightPreferenceKey = "halo_state.messageLineHeight";
+const String _fakeBatchInferenceBenchmarkPreferenceKey = "halo_state.fakeBatchInferenceBenchmarkEnabled";
+const String _batchViewportWidthPreferenceKey = "halo_state.batchViewportWidth";
+const String _renderMarkdownAndLatexPreferenceKey = "halo_state.renderMarkdownAndLatex";
+const String _thinkingModePreferenceKey = "halo_state.thinkingMode";
 
 class _Preference {
   // ===========================================================================
@@ -19,9 +23,16 @@ class _Preference {
   // Instance
   // ===========================================================================
 
+  bool _enableSystemProxy = true;
+
+  bool get enableSystemProxy => _enableSystemProxy;
+
   bool _showBatteryOptimization = true;
 
   var featureRollout = const FeatureRollout();
+
+  bool fakeBatchInferenceBenchmarkEnabled = false;
+  bool renderMarkdownAndLatex = true;
 
   var promptTemplate = PromptTemplate.empty();
 
@@ -69,6 +80,9 @@ class _Preference {
 
   /// 偏好的消息气泡行距；0 表示使用默认行高
   late final preferredMessageLineHeight = qs<double>(0.0);
+  late final renderMarkdownAndLatexEnabled = qs(true);
+
+  late final preferredThinkingMode = qs<thinking_mode.ThinkingMode>(.fast);
 
   /// 偏好的主题模式设置，跟随系统、深色模式、浅色模式
   late final themeMode = qs<ThemeMode>(ThemeMode.system);
@@ -138,6 +152,7 @@ extension _$Preference on _Preference {
     final sp = await SharedPreferences.getInstance();
 
     _showBatteryOptimization = sp.getBool("halo_state.showBatteryOptimizationDialog") ?? true;
+    _enableSystemProxy = sp.getBool("halo_state.enableSystemProxy") ?? true;
 
     final language = sp.getString("halo_state.language");
     if (language != null) {
@@ -207,6 +222,19 @@ extension _$Preference on _Preference {
       } catch (_) {}
     }
 
+    fakeBatchInferenceBenchmarkEnabled = sp.getBool(_fakeBatchInferenceBenchmarkPreferenceKey) ?? false;
+    renderMarkdownAndLatex = sp.getBool(_renderMarkdownAndLatexPreferenceKey) ?? true;
+    renderMarkdownAndLatexEnabled.q = renderMarkdownAndLatex;
+
+    final thinkingMode = sp.getString(_thinkingModePreferenceKey);
+    final validThinkingMode = thinking_mode.ThinkingMode.values.map((e) => e.toString()).contains(thinkingMode);
+    qqr(validThinkingMode ? "Loaded thinking mode: $thinkingMode" : "No valid thinking mode found in preferences, using default");
+    if (validThinkingMode) {
+      preferredThinkingMode.q = thinking_mode.ThinkingMode.fromString(thinkingMode);
+    } else {
+      preferredThinkingMode.q = .fast;
+    }
+
     final tt = sp.getString('app.promptTemplate');
     if (tt != null && tt.isNotEmpty) {
       try {
@@ -246,7 +274,7 @@ extension _$Preference on _Preference {
         final presencePenalty = sp.getDouble("halo_state.custom.presencePenalty");
         final frequencyPenalty = sp.getDouble("halo_state.custom.frequencyPenalty");
         final penaltyDecay = sp.getDouble("halo_state.custom.penaltyDecay");
-        await P.rwkv.syncSamplerParams(
+        await P.rwkvParams.syncSamplerParams(
           temperature: temperature,
           topP: topP,
           presencePenalty: presencePenalty,
@@ -254,7 +282,7 @@ extension _$Preference on _Preference {
           penaltyDecay: penaltyDecay,
         );
       } else {
-        await P.rwkv.syncSamplerParamsFromDefault(type);
+        await P.rwkvParams.syncSamplerParamsFromDefault(type);
       }
 
       final latestSkippedBuildNumber = sp.getInt("halo_state.latestSkippedBuildNumber");
@@ -297,12 +325,12 @@ extension _$Preference on _Preference {
 
     final debugRenderNewlineDirectly = sp.getBool(_debugRenderNewlineDirectlyPreferenceKey);
     if (debugRenderNewlineDirectly != null) {
-      P.rwkv.renderNewlineDirectly.q = debugRenderNewlineDirectly;
+      P.rwkvDebug.renderNewlineDirectly.q = debugRenderNewlineDirectly;
       await sp.remove(_legacyDebugRenderNewlineDirectlyPreferenceKey);
     } else {
       final legacyDebugRenderNewlineDirectly = sp.getBool(_legacyDebugRenderNewlineDirectlyPreferenceKey);
       if (legacyDebugRenderNewlineDirectly != null) {
-        P.rwkv.renderNewlineDirectly.q = legacyDebugRenderNewlineDirectly;
+        P.rwkvDebug.renderNewlineDirectly.q = legacyDebugRenderNewlineDirectly;
         await sp.setBool(_debugRenderNewlineDirectlyPreferenceKey, legacyDebugRenderNewlineDirectly);
         await sp.remove(_legacyDebugRenderNewlineDirectlyPreferenceKey);
       }
@@ -310,12 +338,12 @@ extension _$Preference on _Preference {
 
     final debugRenderSpaceSymbol = sp.getBool(_debugRenderSpaceSymbolPreferenceKey);
     if (debugRenderSpaceSymbol != null) {
-      P.rwkv.renderSpaceSymbol.q = debugRenderSpaceSymbol;
+      P.rwkvDebug.renderSpaceSymbol.q = debugRenderSpaceSymbol;
       await sp.remove(_legacyDebugRenderSpaceSymbolPreferenceKey);
     } else {
       final legacyDebugRenderSpaceSymbol = sp.getBool(_legacyDebugRenderSpaceSymbolPreferenceKey);
       if (legacyDebugRenderSpaceSymbol != null) {
-        P.rwkv.renderSpaceSymbol.q = legacyDebugRenderSpaceSymbol;
+        P.rwkvDebug.renderSpaceSymbol.q = legacyDebugRenderSpaceSymbol;
         await sp.setBool(_debugRenderSpaceSymbolPreferenceKey, legacyDebugRenderSpaceSymbol);
         await sp.remove(_legacyDebugRenderSpaceSymbolPreferenceKey);
       }
@@ -323,7 +351,7 @@ extension _$Preference on _Preference {
 
     final debugShowPrefillLogOnly = sp.getBool(_debugShowPrefillLogOnlyPreferenceKey);
     if (debugShowPrefillLogOnly != null) {
-      P.rwkv.showPrefillLogOnly.q = debugShowPrefillLogOnly;
+      P.rwkvDebug.showPrefillLogOnly.q = debugShowPrefillLogOnly;
     }
 
     await sp.remove("halo_state.debug.visibleSpaceSymbol");
@@ -440,6 +468,35 @@ extension $Preference on _Preference {
     sp.setString('app.dev.feat', jsonEncode(featureRollout.toMap()));
   }
 
+  Future<void> setFakeBatchInferenceBenchmarkEnabled(bool value) async {
+    fakeBatchInferenceBenchmarkEnabled = value;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_fakeBatchInferenceBenchmarkPreferenceKey, value);
+  }
+
+  Future<int?> loadBatchViewportWidth() async {
+    final sp = await SharedPreferences.getInstance();
+    return sp.getInt(_batchViewportWidthPreferenceKey);
+  }
+
+  Future<void> saveBatchViewportWidth(int value) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt(_batchViewportWidthPreferenceKey, value);
+  }
+
+  Future<void> setRenderMarkdownAndLatexEnabled(bool value) async {
+    renderMarkdownAndLatex = value;
+    renderMarkdownAndLatexEnabled.q = value;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_renderMarkdownAndLatexPreferenceKey, value);
+  }
+
+  Future<void> saveThinkingMode(thinking_mode.ThinkingMode value) async {
+    preferredThinkingMode.q = value;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_thinkingModePreferenceKey, value.toString());
+  }
+
   void setThinkingModeUserTemplate(PromptTemplate template) async {
     promptTemplate = template;
     final sp = await SharedPreferences.getInstance();
@@ -490,11 +547,11 @@ extension $Preference on _Preference {
   void saveCustomDecodeParams() async {
     final sp = await SharedPreferences.getInstance();
     await sp.setInt("halo_state.decodeParamType", DecodeParamType.custom.index);
-    await sp.setDouble("halo_state.custom.temperature", P.rwkv.arguments(Argument.temperature).q);
-    await sp.setDouble("halo_state.custom.topP", P.rwkv.arguments(Argument.topP).q);
-    await sp.setDouble("halo_state.custom.presencePenalty", P.rwkv.arguments(Argument.presencePenalty).q);
-    await sp.setDouble("halo_state.custom.frequencyPenalty", P.rwkv.arguments(Argument.frequencyPenalty).q);
-    await sp.setDouble("halo_state.custom.penaltyDecay", P.rwkv.arguments(Argument.penaltyDecay).q);
+    await sp.setDouble("halo_state.custom.temperature", P.rwkvParams.arguments(Argument.temperature).q);
+    await sp.setDouble("halo_state.custom.topP", P.rwkvParams.arguments(Argument.topP).q);
+    await sp.setDouble("halo_state.custom.presencePenalty", P.rwkvParams.arguments(Argument.presencePenalty).q);
+    await sp.setDouble("halo_state.custom.frequencyPenalty", P.rwkvParams.arguments(Argument.frequencyPenalty).q);
+    await sp.setDouble("halo_state.custom.penaltyDecay", P.rwkvParams.arguments(Argument.penaltyDecay).q);
   }
 
   void saveLatestSkippedBuildNumber(int buildNumber) async {
@@ -596,5 +653,11 @@ extension $Preference on _Preference {
   Future<void> saveDebugShowPrefillLogOnly(bool value) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_debugShowPrefillLogOnlyPreferenceKey, value);
+  }
+
+  Future<void> setEnableSystemProxy(bool value) async {
+    _enableSystemProxy = value;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool("halo_state.enableSystemProxy", value);
   }
 }

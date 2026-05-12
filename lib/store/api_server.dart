@@ -1,7 +1,8 @@
 part of 'p.dart';
 
-const _apiServerDefaultPort = 8080;
+const _apiServerDefaultPort = 52345;
 const _apiServerStreamingFirstChunkDelay = Duration(milliseconds: 220);
+const _apiServerFinalBufferTimeout = Duration(milliseconds: 500);
 
 const _apiServerHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +11,40 @@ const _apiServerHeaders = {
 };
 
 class _ApiServerStoppingException implements Exception {}
+
+class _ApiServerResponseBufferGate {
+  _ApiServerResponseBufferGate({
+    required String staleContent,
+    String replacementPrefix = '',
+  }) : _staleContent = staleContent,
+       _replacementPrefix = replacementPrefix,
+       _staleBufferReset = staleContent.isEmpty;
+
+  final String _staleContent;
+  final String _replacementPrefix;
+  bool _staleBufferReset;
+  bool stalePrefixSkipped = false;
+
+  String freshContent(String full) {
+    if (_staleBufferReset) return full;
+    if (full.isEmpty) {
+      _staleBufferReset = true;
+      return '';
+    }
+    if (full == _staleContent) {
+      stalePrefixSkipped = true;
+      return '';
+    }
+    if (full.startsWith(_staleContent)) {
+      stalePrefixSkipped = true;
+      final fresh = full.substring(_staleContent.length);
+      if (_replacementPrefix.isEmpty || fresh.startsWith(_replacementPrefix)) return fresh;
+      return '$_replacementPrefix$fresh';
+    }
+    _staleBufferReset = true;
+    return full;
+  }
+}
 
 class _ApiServer {
   // ===========================================================================
@@ -81,6 +116,36 @@ extension _$ApiServer on _ApiServer {
     return second >= 16 && second <= 31;
   }
 
+  bool _isApiServerSupportedPlatform() {
+    if (Platform.isAndroid) return true;
+    return P.app.isDesktop.q;
+  }
+
+  int _lanIpv4Score(String interfaceName, String host) {
+    final name = interfaceName.toLowerCase();
+    int virtualPenalty = 0;
+    if (name.contains('docker') ||
+        name.contains('vbox') ||
+        name.contains('vmware') ||
+        name.contains('bridge') ||
+        name.contains('utun') ||
+        name.contains('tun') ||
+        name.contains('tap') ||
+        name.contains('vethernet')) {
+      virtualPenalty = 100;
+    }
+
+    if (host.startsWith('192.168.')) return virtualPenalty;
+    if (host.startsWith('10.')) return virtualPenalty + 10;
+    if (!host.startsWith('172.')) return virtualPenalty + 30;
+    final parts = host.split('.');
+    if (parts.length < 2) return virtualPenalty + 30;
+    final second = int.tryParse(parts[1]);
+    if (second == null) return virtualPenalty + 30;
+    if (second >= 16 && second <= 31) return virtualPenalty + 20;
+    return virtualPenalty + 30;
+  }
+
   int _longestSuffixPrefixOverlap(String previous, String current) {
     if (previous.isEmpty || current.isEmpty) return 0;
     final maxOverlap = min(previous.length, current.length);
@@ -93,15 +158,32 @@ extension _$ApiServer on _ApiServer {
     return 0;
   }
 
+  Future<String?> _readLatestResponseBuffer({
+    required int modelID,
+    required List<String> messages,
+  }) async {
+    final request = to_rwkv.GetResponseBufferContent(messages: messages, modelID: modelID);
+    P.rwkvBridge.send(request);
+
+    try {
+      final response = await P.rwkvBridge.broadcastStream
+          .whereType<from_rwkv.ResponseBufferContent>()
+          .firstWhere((event) => event.req == request)
+          .timeout(_apiServerFinalBufferTimeout);
+      return response.responseBufferContent;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _refreshAccessibleUrls({int? portOverride}) async {
-    if (!Platform.isAndroid) {
+    if (!_isApiServerSupportedPlatform()) {
       accessibleUrls.q = [];
       return;
     }
 
     final portValue = portOverride ?? port.q;
-    final preferred = <String>{};
-    final fallback = <String>{};
+    final urlScores = <String, int>{};
 
     try {
       final interfaces = await NetworkInterface.list(
@@ -114,18 +196,23 @@ extension _$ApiServer on _ApiServer {
           final host = address.address;
           if (host.isEmpty) continue;
           final url = 'http://$host:$portValue';
-          if (_isPreferredLanIpv4(host)) {
-            preferred.add(url);
-          } else {
-            fallback.add(url);
-          }
+          final score = _isPreferredLanIpv4(host) ? _lanIpv4Score(interface.name, host) : _lanIpv4Score(interface.name, host) + 50;
+          final previousScore = urlScores[url];
+          if (previousScore != null && previousScore <= score) continue;
+          urlScores[url] = score;
         }
       }
     } catch (e) {
       qqe('Failed to refresh API server URLs: $e');
     }
 
-    final urls = (preferred.isNotEmpty ? preferred : fallback).toList()..sort();
+    final entries = urlScores.entries.toList()
+      ..sort((a, b) {
+        final scoreCompare = a.value.compareTo(b.value);
+        if (scoreCompare != 0) return scoreCompare;
+        return a.key.compareTo(b.key);
+      });
+    final urls = entries.map((e) => e.key).toList();
     accessibleUrls.q = urls;
   }
 
@@ -184,7 +271,7 @@ extension _$ApiServer on _ApiServer {
   }
 
   shelf.Response _handleModels(shelf.Request request) {
-    final loaded = P.rwkv.loadedModels.q;
+    final loaded = P.rwkvModel.allLoaded.q;
     final models = loaded.keys.where((e) => e.weightType == .chat).map((info) {
       return {
         'id': _modelId(info),
@@ -198,7 +285,7 @@ extension _$ApiServer on _ApiServer {
   }
 
   shelf.Response _handleStatus(shelf.Request request) {
-    final loaded = P.rwkv.loadedModels.q;
+    final loaded = P.rwkvModel.allLoaded.q;
     final modelNames = loaded.keys.where((e) => e.weightType == .chat).map((e) => _modelId(e)).toList();
     final uptime = _startTime != null ? DateTime.now().difference(_startTime!).inSeconds : 0;
 
@@ -241,7 +328,7 @@ extension _$ApiServer on _ApiServer {
       return _jsonResponse(_errorJson('messages is required'), status: 400);
     }
 
-    final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
+    final modelID = P.rwkvModel.findModelIDByWeightType(weightType: .chat);
     if (modelID == null) {
       return _jsonResponse(_errorJson('No chat model loaded', type: 'model_not_found'), status: 503);
     }
@@ -273,7 +360,7 @@ extension _$ApiServer on _ApiServer {
     }
 
     final reqId = 'chatcmpl-${DateTime.now().millisecondsSinceEpoch}';
-    final modelName = P.rwkv.latestModel.q != null ? _modelId(P.rwkv.latestModel.q!) : 'rwkv';
+    final modelName = P.rwkvModel.latest.q != null ? _modelId(P.rwkvModel.latest.q!) : 'rwkv';
 
     _addLog('POST /v1/chat/completions (stream=$stream, messages=${messagesRaw.length})');
     requestCount.q++;
@@ -298,6 +385,23 @@ extension _$ApiServer on _ApiServer {
       controller.add(utf8.encode('data: ${jsonEncode(data)}\n\n'));
     }
 
+    void sendDelta(String delta) {
+      if (delta.isEmpty) return;
+      sendSSE({
+        'id': reqId,
+        'object': 'chat.completion.chunk',
+        'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        'model': modelName,
+        'choices': [
+          {
+            'index': 0,
+            'delta': {'content': delta},
+            'finish_reason': null,
+          },
+        ],
+      });
+    }
+
     unawaited(
       _enqueueInference(
         modelID: modelID,
@@ -312,6 +416,13 @@ extension _$ApiServer on _ApiServer {
             maxLength: maxTokens,
           );
 
+          final staleContent =
+              await _readLatestResponseBuffer(
+                modelID: modelID,
+                messages: messages,
+              ) ??
+              '';
+          final bufferGate = _ApiServerResponseBufferGate(staleContent: staleContent);
           String previousContent = '';
           String pendingContent = '';
           DateTime? pendingSince;
@@ -330,13 +441,13 @@ extension _$ApiServer on _ApiServer {
           }
 
           void requestLatestBuffer() {
-            P.rwkv.send(to_rwkv.GetIsGenerating(modelID: modelID));
-            P.rwkv.send(to_rwkv.GetResponseBufferContent(messages: messages, modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetIsGenerating(modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetResponseBufferContent(messages: messages, modelID: modelID));
           }
 
           _pollingTimer?.cancel();
           _broadcastSub?.cancel();
-          _broadcastSub = P.rwkv.broadcastStream.listen((event) {
+          _broadcastSub = P.rwkvBridge.broadcastStream.listen((event) {
             if (event is from_rwkv.GenerateStart) {
               if (event.req?.requestId != request.requestId) return;
               markGenerationStarted();
@@ -357,20 +468,26 @@ extension _$ApiServer on _ApiServer {
               return;
             }
 
-            String full = '';
+            String rawFull = '';
             bool eosFound = false;
             if (event is from_rwkv.ResponseBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetResponseBufferContent || req.modelID != modelID) return;
-              full = event.responseBufferContent;
+              rawFull = event.responseBufferContent;
               eosFound = event.eosFound;
             } else if (event is from_rwkv.ResponseBatchBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetBatchResponseBufferContent || req.modelID != modelID) return;
-              full = event.responseBufferContent.isNotEmpty ? event.responseBufferContent[0] : '';
+              rawFull = event.responseBufferContent.isNotEmpty ? event.responseBufferContent[0] : '';
               eosFound = event.eosFound.isNotEmpty ? event.eosFound[0] : false;
             } else {
               return;
+            }
+
+            final hadStalePrefixSkipped = bufferGate.stalePrefixSkipped;
+            final full = bufferGate.freshContent(rawFull);
+            if (!hadStalePrefixSkipped && bufferGate.stalePrefixSkipped) {
+              _addLog('chat stream ignored stale response buffer');
             }
 
             if (!generationStarted) {
@@ -397,19 +514,7 @@ extension _$ApiServer on _ApiServer {
 
               previousContent = full;
               firstChunkSent = true;
-              sendSSE({
-                'id': reqId,
-                'object': 'chat.completion.chunk',
-                'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                'model': modelName,
-                'choices': [
-                  {
-                    'index': 0,
-                    'delta': {'content': full},
-                    'finish_reason': null,
-                  },
-                ],
-              });
+              sendDelta(full);
               return;
             }
             if (!full.startsWith(previousContent)) {
@@ -417,61 +522,21 @@ extension _$ApiServer on _ApiServer {
               previousContent = full;
               if (overlap > 0) {
                 final delta = full.substring(overlap);
-                if (delta.isNotEmpty) {
-                  sendSSE({
-                    'id': reqId,
-                    'object': 'chat.completion.chunk',
-                    'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                    'model': modelName,
-                    'choices': [
-                      {
-                        'index': 0,
-                        'delta': {'content': delta},
-                        'finish_reason': null,
-                      },
-                    ],
-                  });
-                }
+                sendDelta(delta);
                 _addLog('chat stream prefix mismatch, overlap resynced');
                 return;
               }
-              if (full.isNotEmpty) {
-                sendSSE({
-                  'id': reqId,
-                  'object': 'chat.completion.chunk',
-                  'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                  'model': modelName,
-                  'choices': [
-                    {
-                      'index': 0,
-                      'delta': {'content': full},
-                      'finish_reason': null,
-                    },
-                  ],
-                });
-              }
+              sendDelta(full);
               _addLog('chat stream prefix mismatch, hard resynced');
               return;
             }
             if (full.length > previousContent.length) {
               final delta = full.substring(previousContent.length);
               previousContent = full;
-              sendSSE({
-                'id': reqId,
-                'object': 'chat.completion.chunk',
-                'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                'model': modelName,
-                'choices': [
-                  {
-                    'index': 0,
-                    'delta': {'content': delta},
-                    'finish_reason': null,
-                  },
-                ],
-              });
+              sendDelta(delta);
             }
           });
-          P.rwkv.send(request);
+          P.rwkvBridge.send(request);
           requestLatestBuffer();
           _pollingTimer = Timer.periodic(const Duration(milliseconds: 20), (_) {
             requestLatestBuffer();
@@ -481,6 +546,34 @@ extension _$ApiServer on _ApiServer {
 
           _pollingTimer?.cancel();
           _pollingTimer = null;
+          final finalContent = await _readLatestResponseBuffer(
+            modelID: modelID,
+            messages: messages,
+          );
+          final freshFinalContent = finalContent == null ? null : bufferGate.freshContent(finalContent);
+          if (freshFinalContent != null && freshFinalContent.isNotEmpty) {
+            if (!firstChunkSent) {
+              previousContent = freshFinalContent;
+              firstChunkSent = true;
+              sendDelta(freshFinalContent);
+              _addLog('chat stream recovered final buffer');
+            } else if (freshFinalContent.startsWith(previousContent) && freshFinalContent.length > previousContent.length) {
+              final delta = freshFinalContent.substring(previousContent.length);
+              previousContent = freshFinalContent;
+              sendDelta(delta);
+              _addLog('chat stream appended final buffer delta');
+            } else if (freshFinalContent != previousContent) {
+              final overlap = _longestSuffixPrefixOverlap(previousContent, freshFinalContent);
+              previousContent = freshFinalContent;
+              if (overlap > 0) {
+                sendDelta(freshFinalContent.substring(overlap));
+                _addLog('chat stream recovered final buffer with overlap');
+              } else {
+                sendDelta(freshFinalContent);
+                _addLog('chat stream recovered final buffer with hard resync');
+              }
+            }
+          }
           _broadcastSub?.cancel();
           _broadcastSub = null;
 
@@ -558,6 +651,13 @@ extension _$ApiServer on _ApiServer {
             maxLength: maxTokens,
           );
 
+          final staleContent =
+              await _readLatestResponseBuffer(
+                modelID: modelID,
+                messages: messages,
+              ) ??
+              '';
+          final bufferGate = _ApiServerResponseBufferGate(staleContent: staleContent);
           String lastContent = '';
           bool generationStarted = false;
           final completer = Completer<void>();
@@ -569,13 +669,13 @@ extension _$ApiServer on _ApiServer {
           }
 
           void requestLatestBuffer() {
-            P.rwkv.send(to_rwkv.GetIsGenerating(modelID: modelID));
-            P.rwkv.send(to_rwkv.GetResponseBufferContent(messages: messages, modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetIsGenerating(modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetResponseBufferContent(messages: messages, modelID: modelID));
           }
 
           _pollingTimer?.cancel();
           _broadcastSub?.cancel();
-          _broadcastSub = P.rwkv.broadcastStream.listen((event) {
+          _broadcastSub = P.rwkvBridge.broadcastStream.listen((event) {
             if (event is from_rwkv.GenerateStart) {
               if (event.req?.requestId != request.requestId) return;
               markGenerationStarted();
@@ -599,25 +699,36 @@ extension _$ApiServer on _ApiServer {
             if (event is from_rwkv.ResponseBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetResponseBufferContent || req.modelID != modelID) return;
-              if (!generationStarted && event.responseBufferContent.isEmpty) return;
+              final full = bufferGate.freshContent(event.responseBufferContent);
+              if (full.isEmpty) return;
               markGenerationStarted();
-              lastContent = event.responseBufferContent;
+              lastContent = full;
             } else if (event is from_rwkv.ResponseBatchBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetBatchResponseBufferContent || req.modelID != modelID) return;
               if (event.responseBufferContent.isEmpty) return;
-              if (!generationStarted && event.responseBufferContent[0].isEmpty) return;
+              final full = bufferGate.freshContent(event.responseBufferContent[0]);
+              if (full.isEmpty) return;
               markGenerationStarted();
-              lastContent = event.responseBufferContent[0];
+              lastContent = full;
             }
           });
-          P.rwkv.send(request);
+          P.rwkvBridge.send(request);
           requestLatestBuffer();
           _pollingTimer = Timer.periodic(const Duration(milliseconds: 20), (_) {
             requestLatestBuffer();
           });
 
           await completer.future.timeout(const Duration(minutes: 10), onTimeout: () {});
+
+          final finalContent = await _readLatestResponseBuffer(
+            modelID: modelID,
+            messages: messages,
+          );
+          final freshFinalContent = finalContent == null ? null : bufferGate.freshContent(finalContent);
+          if (freshFinalContent != null && freshFinalContent.isNotEmpty) {
+            lastContent = freshFinalContent;
+          }
 
           _pollingTimer?.cancel();
           _pollingTimer = null;
@@ -667,7 +778,7 @@ extension _$ApiServer on _ApiServer {
       return _jsonResponse(_errorJson('prompt is required'), status: 400);
     }
 
-    final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
+    final modelID = P.rwkvModel.findModelIDByWeightType(weightType: .chat);
     if (modelID == null) {
       return _jsonResponse(_errorJson('No chat model loaded', type: 'model_not_found'), status: 503);
     }
@@ -675,7 +786,7 @@ extension _$ApiServer on _ApiServer {
     final stream = json['stream'] == true;
     final maxTokens = json['max_tokens'] as int?;
     final reqId = 'cmpl-${DateTime.now().millisecondsSinceEpoch}';
-    final modelName = P.rwkv.latestModel.q != null ? _modelId(P.rwkv.latestModel.q!) : 'rwkv';
+    final modelName = P.rwkvModel.latest.q != null ? _modelId(P.rwkvModel.latest.q!) : 'rwkv';
 
     _addLog('POST /v1/completions (stream=$stream)');
     requestCount.q++;
@@ -700,6 +811,19 @@ extension _$ApiServer on _ApiServer {
       controller.add(utf8.encode('data: ${jsonEncode(data)}\n\n'));
     }
 
+    void sendDelta(String delta) {
+      if (delta.isEmpty) return;
+      sendSSE({
+        'id': reqId,
+        'object': 'text_completion',
+        'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        'model': modelName,
+        'choices': [
+          {'index': 0, 'text': delta, 'finish_reason': null},
+        ],
+      });
+    }
+
     unawaited(
       _enqueueInference(
         modelID: modelID,
@@ -712,6 +836,16 @@ extension _$ApiServer on _ApiServer {
             maxLength: maxTokens,
           );
 
+          final staleContent =
+              await _readLatestResponseBuffer(
+                modelID: modelID,
+                messages: const <String>[],
+              ) ??
+              '';
+          final bufferGate = _ApiServerResponseBufferGate(
+            staleContent: staleContent,
+            replacementPrefix: prompt,
+          );
           String previousContent = prompt;
           String pendingContent = '';
           DateTime? pendingSince;
@@ -730,13 +864,13 @@ extension _$ApiServer on _ApiServer {
           }
 
           void requestLatestBuffer() {
-            P.rwkv.send(to_rwkv.GetIsGenerating(modelID: modelID));
-            P.rwkv.send(to_rwkv.GetResponseBufferContent(messages: [], modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetIsGenerating(modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetResponseBufferContent(messages: [], modelID: modelID));
           }
 
           _pollingTimer?.cancel();
           _broadcastSub?.cancel();
-          _broadcastSub = P.rwkv.broadcastStream.listen((event) {
+          _broadcastSub = P.rwkvBridge.broadcastStream.listen((event) {
             if (event is from_rwkv.GenerateStart) {
               if (event.req?.requestId != request.requestId) return;
               markGenerationStarted();
@@ -757,20 +891,26 @@ extension _$ApiServer on _ApiServer {
               return;
             }
 
-            String full = '';
+            String rawFull = '';
             bool eosFound = false;
             if (event is from_rwkv.ResponseBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetResponseBufferContent || req.modelID != modelID) return;
-              full = event.responseBufferContent;
+              rawFull = event.responseBufferContent;
               eosFound = event.eosFound;
             } else if (event is from_rwkv.ResponseBatchBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetBatchResponseBufferContent || req.modelID != modelID) return;
-              full = event.responseBufferContent.isNotEmpty ? event.responseBufferContent[0] : '';
+              rawFull = event.responseBufferContent.isNotEmpty ? event.responseBufferContent[0] : '';
               eosFound = event.eosFound.isNotEmpty ? event.eosFound[0] : false;
             } else {
               return;
+            }
+
+            final hadStalePrefixSkipped = bufferGate.stalePrefixSkipped;
+            final full = bufferGate.freshContent(rawFull);
+            if (!hadStalePrefixSkipped && bufferGate.stalePrefixSkipped) {
+              _addLog('completion stream ignored stale response buffer');
             }
 
             if (!generationStarted) {
@@ -798,16 +938,7 @@ extension _$ApiServer on _ApiServer {
               final firstDelta = full.startsWith(prompt) ? full.substring(prompt.length) : full;
               previousContent = full;
               firstChunkSent = true;
-              if (firstDelta.isEmpty) return;
-              sendSSE({
-                'id': reqId,
-                'object': 'text_completion',
-                'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                'model': modelName,
-                'choices': [
-                  {'index': 0, 'text': firstDelta, 'finish_reason': null},
-                ],
-              });
+              sendDelta(firstDelta);
               return;
             }
             if (!full.startsWith(previousContent)) {
@@ -815,49 +946,21 @@ extension _$ApiServer on _ApiServer {
               previousContent = full;
               if (overlap > 0) {
                 final delta = full.substring(overlap);
-                if (delta.isNotEmpty) {
-                  sendSSE({
-                    'id': reqId,
-                    'object': 'text_completion',
-                    'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                    'model': modelName,
-                    'choices': [
-                      {'index': 0, 'text': delta, 'finish_reason': null},
-                    ],
-                  });
-                }
+                sendDelta(delta);
                 _addLog('completion stream prefix mismatch, overlap resynced');
                 return;
               }
-              if (full.isNotEmpty) {
-                sendSSE({
-                  'id': reqId,
-                  'object': 'text_completion',
-                  'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                  'model': modelName,
-                  'choices': [
-                    {'index': 0, 'text': full, 'finish_reason': null},
-                  ],
-                });
-              }
+              sendDelta(full);
               _addLog('completion stream prefix mismatch, hard resynced');
               return;
             }
             if (full.length > previousContent.length) {
               final delta = full.substring(previousContent.length);
               previousContent = full;
-              sendSSE({
-                'id': reqId,
-                'object': 'text_completion',
-                'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                'model': modelName,
-                'choices': [
-                  {'index': 0, 'text': delta, 'finish_reason': null},
-                ],
-              });
+              sendDelta(delta);
             }
           });
-          P.rwkv.send(request);
+          P.rwkvBridge.send(request);
           requestLatestBuffer();
           _pollingTimer = Timer.periodic(const Duration(milliseconds: 20), (_) {
             requestLatestBuffer();
@@ -867,6 +970,36 @@ extension _$ApiServer on _ApiServer {
 
           _pollingTimer?.cancel();
           _pollingTimer = null;
+          final finalContent = await _readLatestResponseBuffer(
+            modelID: modelID,
+            messages: const <String>[],
+          );
+          final freshFinalContent = finalContent == null ? null : bufferGate.freshContent(finalContent);
+          if (freshFinalContent != null && freshFinalContent.isNotEmpty) {
+            if (!firstChunkSent) {
+              previousContent = freshFinalContent;
+              firstChunkSent = true;
+              final delta = freshFinalContent.startsWith(prompt) ? freshFinalContent.substring(prompt.length) : freshFinalContent;
+              sendDelta(delta);
+              _addLog('completion stream recovered final buffer');
+            } else if (freshFinalContent.startsWith(previousContent) && freshFinalContent.length > previousContent.length) {
+              final delta = freshFinalContent.substring(previousContent.length);
+              previousContent = freshFinalContent;
+              sendDelta(delta);
+              _addLog('completion stream appended final buffer delta');
+            } else if (freshFinalContent != previousContent) {
+              final overlap = _longestSuffixPrefixOverlap(previousContent, freshFinalContent);
+              previousContent = freshFinalContent;
+              if (overlap > 0) {
+                sendDelta(freshFinalContent.substring(overlap));
+                _addLog('completion stream recovered final buffer with overlap');
+              } else {
+                final delta = freshFinalContent.startsWith(prompt) ? freshFinalContent.substring(prompt.length) : freshFinalContent;
+                sendDelta(delta);
+                _addLog('completion stream recovered final buffer with hard resync');
+              }
+            }
+          }
           _broadcastSub?.cancel();
           _broadcastSub = null;
 
@@ -934,6 +1067,16 @@ extension _$ApiServer on _ApiServer {
             maxLength: maxTokens,
           );
 
+          final staleContent =
+              await _readLatestResponseBuffer(
+                modelID: modelID,
+                messages: const <String>[],
+              ) ??
+              '';
+          final bufferGate = _ApiServerResponseBufferGate(
+            staleContent: staleContent,
+            replacementPrefix: prompt,
+          );
           String lastContent = '';
           bool generationStarted = false;
           final completer = Completer<void>();
@@ -945,13 +1088,13 @@ extension _$ApiServer on _ApiServer {
           }
 
           void requestLatestBuffer() {
-            P.rwkv.send(to_rwkv.GetIsGenerating(modelID: modelID));
-            P.rwkv.send(to_rwkv.GetResponseBufferContent(messages: [], modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetIsGenerating(modelID: modelID));
+            P.rwkvBridge.send(to_rwkv.GetResponseBufferContent(messages: [], modelID: modelID));
           }
 
           _pollingTimer?.cancel();
           _broadcastSub?.cancel();
-          _broadcastSub = P.rwkv.broadcastStream.listen((event) {
+          _broadcastSub = P.rwkvBridge.broadcastStream.listen((event) {
             if (event is from_rwkv.GenerateStart) {
               if (event.req?.requestId != request.requestId) return;
               markGenerationStarted();
@@ -975,25 +1118,36 @@ extension _$ApiServer on _ApiServer {
             if (event is from_rwkv.ResponseBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetResponseBufferContent || req.modelID != modelID) return;
-              if (!generationStarted && event.responseBufferContent.isEmpty) return;
+              final full = bufferGate.freshContent(event.responseBufferContent);
+              if (full.isEmpty) return;
               markGenerationStarted();
-              lastContent = event.responseBufferContent;
+              lastContent = full;
             } else if (event is from_rwkv.ResponseBatchBufferContent) {
               final req = event.req;
               if (req is! to_rwkv.GetBatchResponseBufferContent || req.modelID != modelID) return;
               if (event.responseBufferContent.isEmpty) return;
-              if (!generationStarted && event.responseBufferContent[0].isEmpty) return;
+              final full = bufferGate.freshContent(event.responseBufferContent[0]);
+              if (full.isEmpty) return;
               markGenerationStarted();
-              lastContent = event.responseBufferContent[0];
+              lastContent = full;
             }
           });
-          P.rwkv.send(request);
+          P.rwkvBridge.send(request);
           requestLatestBuffer();
           _pollingTimer = Timer.periodic(const Duration(milliseconds: 20), (_) {
             requestLatestBuffer();
           });
 
           await completer.future.timeout(const Duration(minutes: 10), onTimeout: () {});
+
+          final finalContent = await _readLatestResponseBuffer(
+            modelID: modelID,
+            messages: const <String>[],
+          );
+          final freshFinalContent = finalContent == null ? null : bufferGate.freshContent(finalContent);
+          if (freshFinalContent != null && freshFinalContent.isNotEmpty) {
+            lastContent = freshFinalContent;
+          }
 
           _pollingTimer?.cancel();
           _pollingTimer = null;
@@ -1063,11 +1217,11 @@ extension _$ApiServer on _ApiServer {
     if (!activeRequest.q) return false;
     final modelID = _activeModelID;
     _addLog('Stop requested for active API request');
-    if (P.rwkv.isAlbatrossLoaded.q || modelID == null) {
-      await P.rwkv.stop();
+    if (P.rwkvContext.isAlbatrossLoaded.q || modelID == null) {
+      await P.rwkvGeneration.stop();
       return true;
     }
-    P.rwkv.send(to_rwkv.Stop(modelID: modelID));
+    P.rwkvBridge.send(to_rwkv.Stop(modelID: modelID));
     return true;
   }
 
@@ -1121,7 +1275,7 @@ extension _$ApiServer on _ApiServer {
 
 extension $ApiServer on _ApiServer {
   Future<void> start() async {
-    if (!P.app.isDesktop.q && !Platform.isAndroid) return;
+    if (!_isApiServerSupportedPlatform()) return;
 
     if (state.q == BackendState.running) {
       Alert.warning(S.current.api_server_running);
@@ -1130,7 +1284,7 @@ extension $ApiServer on _ApiServer {
 
     if (state.q != BackendState.stopped) return;
 
-    final loaded = P.rwkv.loadedModels.q;
+    final loaded = P.rwkvModel.allLoaded.q;
     if (loaded.isEmpty || !loaded.keys.any((e) => e.weightType == .chat)) {
       Alert.warning(S.current.api_server_select_model_first);
       return;
@@ -1138,10 +1292,9 @@ extension $ApiServer on _ApiServer {
 
     state.q = BackendState.starting;
     final p = port.q;
-    final bindAddress = Platform.isAndroid ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4;
 
     try {
-      final httpServer = await HttpServer.bind(bindAddress, p);
+      final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, p);
       httpServer.autoCompress = false;
       httpServer.listen((HttpRequest request) {
         final isSSE = request.method == 'POST' && (request.uri.path.contains('completions'));
@@ -1157,14 +1310,14 @@ extension $ApiServer on _ApiServer {
       logs.q = [];
       await _refreshAccessibleUrls(portOverride: p);
       _addLog('Server started on port $p');
+      final urls = accessibleUrls.q;
+      final lanText = urls.isEmpty ? 'no LAN URL detected' : urls.join(', ');
+      _addLog('LAN URLs: $lanText');
       if (Platform.isAndroid) {
-        final urls = accessibleUrls.q;
-        final lanText = urls.isEmpty ? 'no LAN URL detected' : urls.join(', ');
-        _addLog('LAN URLs: $lanText');
         qqr('API Server started on Android: $lanText');
         await WakelockPlus.enable();
       } else {
-        qqr('API Server started at http://127.0.0.1:$p');
+        qqr('API Server started on LAN: $lanText');
       }
       Alert.success(S.current.api_server_started_on_port(p));
     } catch (e) {
@@ -1176,7 +1329,7 @@ extension $ApiServer on _ApiServer {
   }
 
   Future<void> stop() async {
-    if (!P.app.isDesktop.q && !Platform.isAndroid) return;
+    if (!_isApiServerSupportedPlatform()) return;
     final httpServer = server.q;
     if (httpServer == null) return;
 

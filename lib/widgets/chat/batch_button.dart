@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 // Package imports:
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo/halo.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 // Project imports:
 import 'package:zone/store/p.dart';
@@ -23,20 +22,19 @@ class BatchButton extends ConsumerWidget {
     final fontSize = theme.textTheme.bodyMedium?.fontSize ?? 14;
     final appTheme = ref.watch(P.app.theme);
     final height = InputInteractions.calculateButtonHeight(context);
-    final loading = ref.watch(P.rwkv.loading);
-    final generating = ref.watch(P.rwkv.generating);
-    final loaded = ref.watch(P.rwkv.loaded);
-    final latestModel = ref.watch(P.rwkv.latestModel);
-    final batchAllowed = latestModel?.tags.contains("batch") ?? false;
-    final batchEnabled = ref.watch(P.chat.batchEnabled);
-
-    final batchCount = ref.watch(P.chat.batchCount);
+    final loading = ref.watch(P.rwkvModel.loading);
+    final generating = ref.watch(P.rwkvGeneration.generating);
+    final loaded = ref.watch(P.rwkvModel.loaded);
+    final latestModel = ref.watch(P.rwkvModel.latest);
+    final batchAllowed = latestModel?.supportsBatchInference ?? false;
+    final batchEnabled = ref.watch(P.chat.effectiveBatchEnabled);
+    final batchCount = ref.watch(P.chat.effectiveBatchCount);
     final canEnable = loaded && !loading && !generating && batchAllowed;
 
-    final InteractionVisualState interactionState = switch ((canEnable, batchEnabled)) {
-      (false, _) => .unavailable,
-      (true, true) => .enabled,
-      (true, false) => .available,
+    final InteractionVisualState interactionState = switch ((batchEnabled, canEnable)) {
+      (true, _) => .enabled,
+      (false, true) => .available,
+      (false, false) => .unavailable,
     };
 
     final colors = interactionVisualColors(appTheme: appTheme, state: interactionState);
@@ -51,7 +49,7 @@ class BatchButton extends ConsumerWidget {
 
     return IntrinsicWidth(
       child: GestureDetector(
-        onTap: P.rwkv.onBatchInferenceTapped,
+        onTap: P.rwkvParams.onBatchInferenceTapped,
         child: ClipRRect(
           borderRadius: .circular(60),
           child: BackdropFilter(
@@ -76,7 +74,7 @@ class BatchButton extends ConsumerWidget {
                 mainAxisAlignment: .center,
                 crossAxisAlignment: .center,
                 children: [
-                  Icon(Symbols.playlist_play, color: textColor, size: appTheme.inputBarInteractionsIconSize),
+                  Icon(Icons.playlist_play, color: textColor, size: appTheme.inputBarInteractionsIconSize),
                   if (batchEnabled) const SizedBox(width: 4),
                   if (batchEnabled)
                     Text(

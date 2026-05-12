@@ -80,11 +80,12 @@ StateProviderFamily<V, K> qsff<K, V>(V Function(Ref<V> ref, K arg) createFn)
 
 - `rwkv_mobile_flutter` 是本项目使用的 LLM inference 引擎。
 
-### 4.6 双仓协作规则
+### 4.6 多仓协作规则
 
 - 本项目通常与两个强关联仓库一起工作：
   - Frontend：当前仓库 `rwkv_app`
   - Adapter / FFI：`../rwkv_mobile_flutter`
+  - 官方下载页面与后台管理系统：`../app_website` (rwkv.halowang.cloud)
 - 默认路径解析方式：
   - frontend 根目录 = 当前工作目录仓库根目录
   - adapter 根目录 = `../rwkv_mobile_flutter`
@@ -264,3 +265,14 @@ final theme = Theme.of(context);
 - 如果修改了 `lib` 下 UI 文件，是否避开了 `Divider`、`ListTile`、`FutureBuilder`、重复 `Theme.of(context)`、旧式 `MediaQuery.of(context)`。
 - 是否避免了无关改动。
 - 是否没有自动 `commit`。
+
+## 7. 禁止使用的句式
+
+你在语言表达上有非常多不合人意的地方，严格禁止你使用下面的句式，以及腔调
+
+- ...接住你...
+- ...不是...而是...
+- ...补一刀...
+- ...定死...
+- ...落...
+- ...兜底...

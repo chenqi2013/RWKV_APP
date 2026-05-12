@@ -6,6 +6,38 @@ enum _UserMessageMenuAction {
   deleteCurrentBranch,
 }
 
+const String _fakeBatchInferenceBenchmarkCharacterPool = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ     .,!?;:-";
+const Duration _visibleReceivedTokensInterval = Duration(milliseconds: 33);
+const List<int> _fakeBatchInferenceBenchmarkFixedTargetLengths = <int>[500, 1000, 1500];
+
+class _FakeBatchInferenceBenchmarkSlotState {
+  final String content;
+  final int targetLength;
+  final int intervalMultiplier;
+  final bool completed;
+
+  const _FakeBatchInferenceBenchmarkSlotState({
+    required this.content,
+    required this.targetLength,
+    required this.intervalMultiplier,
+    required this.completed,
+  });
+
+  _FakeBatchInferenceBenchmarkSlotState copyWith({
+    String? content,
+    int? targetLength,
+    int? intervalMultiplier,
+    bool? completed,
+  }) {
+    return _FakeBatchInferenceBenchmarkSlotState(
+      content: content ?? this.content,
+      targetLength: targetLength ?? this.targetLength,
+      intervalMultiplier: intervalMultiplier ?? this.intervalMultiplier,
+      completed: completed ?? this.completed,
+    );
+  }
+}
+
 class _Chat {
   // ===========================================================================
   // Instance
@@ -25,6 +57,25 @@ class _Chat {
   late final _sensitiveThrottler = Throttler(milliseconds: 333, trailing: true);
   late final _liveTokenCountThrottler = Throttler(milliseconds: 997, trailing: true);
   int _refreshTokenCountEpoch = 0;
+  bool _responseStyleSequentialActive = false;
+  bool _responseStyleSequentialStopRequested = false;
+  int? _responseStyleSequentialMessageId;
+  int _responseStyleSequentialCurrentRouteIndex = 0;
+  bool _responseStyleSequentialForceChinese = false;
+  String _responseStyleSequentialCurrentOutput = "";
+  String? _responseStyleSequentialCurrentAssistantMessage;
+  List<ResponseStyleRoute> _responseStyleSequentialRoutes = const <ResponseStyleRoute>[];
+  List<String> _responseStyleSequentialBaseHistory = const <String>[];
+  List<String> _responseStyleSequentialCompletedOutputs = const <String>[];
+  Timer? _fakeBatchInferenceBenchmarkTimer;
+  Timer? _visibleReceivedTokensTimer;
+  int? _fakeBatchInferenceBenchmarkMessageId;
+  List<_FakeBatchInferenceBenchmarkSlotState> _fakeBatchInferenceBenchmarkSlotStates = const <_FakeBatchInferenceBenchmarkSlotState>[];
+  int _fakeBatchInferenceBenchmarkSlotIndex = 0;
+  int _fakeBatchInferenceBenchmarkTick = 0;
+  Map<int, int> _fakeBatchInferenceBenchmarkFixedTargetsBySlot = const <int, int>{};
+  String _latestVisibleReceivedTokens = "";
+  final math.Random _fakeBatchInferenceBenchmarkRandom = math.Random();
 
   // ===========================================================================
   // StateProvider
@@ -37,6 +88,7 @@ class _Chat {
 
   /// TODO: Should be moved to state/rwkv.dart
   late final receivedTokens = qs("");
+  late final visibleReceivedTokens = qs("");
 
   late final inputHeight = qs(77.0);
 
@@ -58,12 +110,15 @@ class _Chat {
 
   late final webSearchMode = qs(WebSearchMode.off);
 
-  // 使用文言文
-  late final wenYanWen = qs(WenyanMode.off);
+  late final responseStyle = qs(const ResponseStyleState());
 
   late final batchEnabled = qs(Args.enableBatchInference);
   late final batchCount = qs<int>(Argument.batchCount.defaults.toInt());
-  late final batchVW = qs<int>(Argument.batchVW.defaults.toInt());
+  late final fakeBatchInferenceBenchmarkEnabled = qs(false);
+
+  /// (messageId, slotIndex) 指向当前预览页要展示的 batch slot
+  late final batchPreviewTarget = qs<(int, int)?>(null);
+  late final batchViewportSlotIndexes = qs<({int messageId, Set<int> indexes})?>(null);
 
   /// 当前需要在 AppBar 新对话按钮上展示引导的会话 id
   late final newConversationGuideConversationId = qs<int?>(null);
@@ -74,6 +129,33 @@ class _Chat {
   /// 正在后台自动加载上次使用的模型
   late final isAutoLoadingModel = qs(false);
 
+  void updateBatchViewportSlotIndexes({
+    required int messageId,
+    required Set<int> indexes,
+  }) {
+    final current = batchViewportSlotIndexes.q;
+    if (current != null && current.messageId == messageId && _sameIntSet(current.indexes, indexes)) return;
+    batchViewportSlotIndexes.q = (
+      messageId: messageId,
+      indexes: Set<int>.unmodifiable(indexes),
+    );
+  }
+
+  void clearBatchViewportSlotIndexes({required int messageId}) {
+    final current = batchViewportSlotIndexes.q;
+    if (current == null) return;
+    if (current.messageId != messageId) return;
+    batchViewportSlotIndexes.q = null;
+  }
+
+  bool _sameIntSet(Set<int> a, Set<int> b) {
+    if (a.length != b.length) return false;
+    for (final item in a) {
+      if (!b.contains(item)) return false;
+    }
+    return true;
+  }
+
   // ===========================================================================
   // Provider
   // ===========================================================================
@@ -82,18 +164,60 @@ class _Chat {
     final textInInput = ref.watch(this.textInInput);
     return textInInput.trim().isNotEmpty;
   });
+
+  late final effectiveBatchEnabled = qp((ref) {
+    final currentModel = ref.watch(P.rwkvModel.latest);
+    if (!(currentModel?.supportsBatchInference ?? false)) {
+      return false;
+    }
+
+    final responseStyle = ref.watch(this.responseStyle);
+    if (responseStyle.activeCount > 1) {
+      return true;
+    }
+    return ref.watch(batchEnabled);
+  });
+
+  late final effectiveBatchCount = qp((ref) {
+    final currentModel = ref.watch(P.rwkvModel.latest);
+    if (!(currentModel?.supportsBatchInference ?? false)) {
+      return 1;
+    }
+
+    final responseStyle = ref.watch(this.responseStyle);
+    if (responseStyle.activeCount > 1) {
+      return responseStyle.activeCount;
+    }
+    return ref.watch(batchCount);
+  });
 }
 
 /// Public methods
 extension $Chat on _Chat {
   void clearMessages() {
+    _cancelFakeBatchInferenceBenchmark(updateGenerating: true);
     P.msg._clear();
+  }
+
+  void onBatchSlotSelected({
+    required Message msg,
+    required int slotIndex,
+    String? slotContent,
+  }) {
+    P.msg.batchSelection(msg).q = slotIndex;
+    unawaited(
+      P.conversation.updateCurrentConvSubtitleFromMessage(
+        msg,
+        selectedBatch: slotIndex,
+        contentOverride: slotContent,
+      ),
+    );
   }
 
   Future<void> onDeleteBranchPressed({
     required Message msg,
   }) async {
-    if (P.rwkv.generating.q) {
+    if (P.rwkvGeneration.generating.q) {
       Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
       return;
     }
@@ -176,7 +300,7 @@ extension $Chat on _Chat {
     final currentReceiveId = receiveId.q;
     if (currentReceiveId != null && deletedIdSet.contains(currentReceiveId)) {
       receiveId.q = null;
-      receivedTokens.q = "";
+      _setReceivedTokens("", immediateUi: true);
     }
 
     P.msg.ids.q = P.msg.msgNode.q.latestMsgIdsWithoutRoot;
@@ -205,19 +329,25 @@ extension $Chat on _Chat {
   }
 
   void onSwitchWebSearchMode(WebSearchMode mode) async {
-    final receiving = P.rwkv.generating.q;
+    final receiving = P.rwkvGeneration.generating.q;
     if (receiving) {
       Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
       return;
     }
-    if (mode != WebSearchMode.off) {
-      wenYanWen.q = WenyanMode.off;
-    }
     webSearchMode.q = mode;
   }
 
+  void onFakeBatchInferenceBenchmarkChanged(bool value) async {
+    if (P.rwkvGeneration.generating.q) {
+      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
+      return;
+    }
+    fakeBatchInferenceBenchmarkEnabled.q = value;
+    await P.preference.setFakeBatchInferenceBenchmarkEnabled(value);
+  }
+
   Future<void> onWebSearchModeTapped() async {
-    final receiving = P.rwkv.generating.q;
+    final receiving = P.rwkvGeneration.generating.q;
     if (receiving) {
       Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
       return;
@@ -257,44 +387,14 @@ extension $Chat on _Chat {
     onSwitchWebSearchMode(selectedMode);
   }
 
-  void onSwitchWenYanWen(WenyanMode mode) async {
-    final receiving = P.rwkv.generating.q;
+  Future<void> onResponseStyleTapped() async {
+    final receiving = P.rwkvGeneration.generating.q;
     if (receiving) {
       Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
       return;
     }
 
-    switch (mode) {
-      case .off:
-      case .classic:
-        break;
-      case .mixed:
-        if (batchEnabled.q == false) batchEnabled.q = true;
-    }
-
-    if (mode != WenyanMode.off) {
-      webSearchMode.q = WebSearchMode.off;
-      if (mode == WenyanMode.mixed && P.rwkv.supportedBatchSizes.q.isNotEmpty) {
-        onBatchInferenceSwitchChanged(true);
-        batchCount.q = 2;
-      }
-    } else {
-      if (wenYanWen.q == WenyanMode.mixed && batchCount.q == 2) {
-        onBatchInferenceSwitchChanged(false);
-      }
-    }
-
-    wenYanWen.q = mode;
-  }
-
-  Future<void> onWenYanWenTapped() async {
-    final receiving = P.rwkv.generating.q;
-    if (receiving) {
-      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
-      return;
-    }
-
-    final model = P.rwkv.latestModel.q;
+    final model = P.rwkvModel.latest.q;
     if (model == null) {
       ModelSelector.show();
       return;
@@ -304,36 +404,856 @@ extension $Chat on _Chat {
     if (context == null) return;
 
     P.app.hapticLight();
+    await ResponseStylePanel.show();
+  }
 
-    final currentMode = wenYanWen.q;
-    final actionPairs = <({String label, WenyanMode key})>[
-      (label: "文言: 关", key: .off),
-      (label: "文言: 开", key: .classic),
-      (label: "古今", key: .mixed),
-    ];
-    final actions = actionPairs.map((entry) {
-      final isCurrent = entry.key == currentMode;
-      final label = isCurrent ? "☑ ${entry.label}" : entry.label;
-      final key = entry.key;
-      return SheetAction(label: label, key: key);
-    }).toList();
-
-    final selectedMode = await showModalActionSheet<WenyanMode>(
-      context: context,
-      title: "文言",
-      message: "请选择文言模式",
-      cancelLabel: S.current.cancel,
-      actions: actions,
-    );
-
-    if (selectedMode == null) return;
-
-    if (!model.tags.contains('batch') && selectedMode == WenyanMode.mixed) {
-      Alert.warning(S.current.this_model_does_not_support_batch_inference);
+  Future<void> onResponseStyleRouteChanged({
+    required ResponseStyleRoute route,
+    required bool enabled,
+  }) async {
+    final receiving = P.rwkvGeneration.generating.q;
+    if (receiving) {
+      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
       return;
     }
 
-    onSwitchWenYanWen(selectedMode);
+    final ResponseStyleState currentState = responseStyle.q;
+    if (currentState.enabledFor(route) == enabled) {
+      return;
+    }
+    if (!currentState.canToggle(route, enabled)) {
+      resetResponseStyle();
+      Alert.info(S.current.response_style_auto_switched_to_jin);
+      return;
+    }
+
+    final ResponseStyleState nextState = currentState.copyWithRoute(route, enabled);
+    if (!_canUseResponseStyleRouteCount(nextState.activeCount)) {
+      final bool wantsToReplaceSingleRoute = enabled && currentState.activeCount == 1 && !currentState.enabledFor(route);
+      if (wantsToReplaceSingleRoute) {
+        final ResponseStyleState replacementState = ResponseStyleState.only(route);
+        await _applyResponseStyleState(replacementState);
+        return;
+      }
+      Alert.warning(S.current.response_style_batch_not_supported(nextState.activeCount));
+      return;
+    }
+
+    await _applyResponseStyleState(nextState);
+  }
+
+  Future<void> onAllResponseStyleRoutesSelected() async {
+    final receiving = P.rwkvGeneration.generating.q;
+    if (receiving) {
+      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
+      return;
+    }
+
+    final ResponseStyleState currentState = responseStyle.q;
+    if (currentState.hasAllRoutes) {
+      return;
+    }
+
+    final ResponseStyleState nextState = ResponseStyleState.all();
+    if (!_canUseResponseStyleRouteCount(nextState.activeCount)) {
+      Alert.warning(S.current.response_style_batch_not_supported(nextState.activeCount));
+      return;
+    }
+
+    await _applyResponseStyleState(nextState);
+  }
+
+  Future<void> onResponseStyleRandomQuestionsTapped() async {
+    final receiving = P.rwkvGeneration.generating.q;
+    if (receiving) {
+      Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
+      return;
+    }
+
+    if (!checkModelSelection(preferredDemoType: .chat)) return;
+
+    final model = P.rwkvModel.latest.q;
+    if (model == null) {
+      ModelSelector.show();
+      return;
+    }
+
+    final routes = responseStyle.q.enabledRoutesInOrder;
+    final routeCount = routes.length;
+    if (!_canUseResponseStyleRouteCount(routeCount)) {
+      Alert.warning(S.current.response_style_batch_not_supported(routeCount));
+      return;
+    }
+
+    final questions = P.suggestion.pickRandomChatPrompts(routeCount);
+    if (questions.length < routeCount) {
+      Alert.warning(S.current.response_style_random_questions_not_enough(routeCount), position: AlertPosition.bottom);
+      return;
+    }
+
+    _clearResponseStyleSequentialState();
+    final sent = await _sendResponseStyleRandomQuestions(
+      routes: routes,
+      questions: questions,
+    );
+    if (!sent) return;
+    pop();
+  }
+
+  void resetResponseStyle() {
+    responseStyle.q = const ResponseStyleState();
+    batchEnabled.q = false;
+    batchCount.q = Argument.batchCount.defaults.toInt();
+  }
+
+  Future<void> _applyResponseStyleState(
+    ResponseStyleState state,
+  ) async {
+    responseStyle.q = state;
+    if (state.activeCount > 1) {
+      await _setFastThinkingModeForResponseStyleBatch();
+    }
+    await _syncBatchStateForResponseStyle(activeCount: state.activeCount);
+  }
+
+  Future<void> _syncBatchStateForResponseStyle({
+    required int activeCount,
+  }) async {
+    if (activeCount <= 1) {
+      batchEnabled.q = false;
+      batchCount.q = Argument.batchCount.defaults.toInt();
+      return;
+    }
+    if (!batchEnabled.q) {
+      await onBatchInferenceSwitchChanged(true, triggeredByResponseStyle: true);
+    }
+    if (batchCount.q == activeCount) {
+      return;
+    }
+    batchCount.q = activeCount;
+  }
+
+  bool _canUseResponseStyleRouteCount(int activeCount) {
+    if (activeCount <= 0) {
+      return false;
+    }
+    final model = P.rwkvModel.latest.q;
+    if (model == null) {
+      return false;
+    }
+    if (activeCount <= 1) {
+      return true;
+    }
+    return _supportsResponseStyleBatchExecution(activeCount);
+  }
+
+  bool _supportsResponseStyleBatchExecution(int activeCount) {
+    if (activeCount <= 1) {
+      return false;
+    }
+    final model = P.rwkvModel.latest.q;
+    if (model == null) {
+      return false;
+    }
+    if (!model.supportsBatchInference) {
+      return false;
+    }
+
+    final supportedBatchSizes = P.rwkvParams.supportedBatchSizes.q;
+    if (supportedBatchSizes.isEmpty) {
+      return true;
+    }
+
+    return supportedBatchSizes.max >= activeCount;
+  }
+
+  bool _shouldUseResponseStyleBatchExecution(int activeCount) {
+    return _supportsResponseStyleBatchExecution(activeCount);
+  }
+
+  MsgNode? _prepareParentNodeForNewChatMessage() {
+    final parentNode = P.msg.msgNode.q.wholeLatestNode;
+    final parentMsg = P.msg.pool.q[parentNode.id];
+    if (parentMsg == null) return parentNode;
+    if (parentMsg.type != MessageType.text) return parentNode;
+    if (parentMsg.isMine) return parentNode;
+    if (!getIsBatch(parentMsg.content)) return parentNode;
+
+    final selection = P.msg.batchSelection(parentMsg).q;
+    if (selection == null) {
+      Alert.info(S.current.please_select_a_branch_to_continue_the_conversation, position: AlertPosition.bottom);
+      return null;
+    }
+
+    final batch = parentMsg.content.split(Config.batchMarker);
+    if (selection < 0 || selection >= batch.length) {
+      Alert.info(S.current.please_select_a_branch_to_continue_the_conversation, position: AlertPosition.bottom);
+      return null;
+    }
+
+    final finalizedContent = batch[selection];
+    P.msg._syncMsg(
+      parentMsg.id,
+      parentMsg.copyWith(
+        content: finalizedContent,
+        clearBatchSlotLabels: true,
+      ),
+    );
+    unawaited(
+      _refreshTokenCountsForMessage(
+        messageId: parentMsg.id,
+        overrideBotContent: finalizedContent,
+        persistToMessage: true,
+      ),
+    );
+
+    final userParentNode = P.msg.msgNode.q.findParentByMsgId(parentMsg.id);
+    if (userParentNode == null) return parentNode;
+    final userParentMsg = P.msg.pool.q[userParentNode.id];
+    if (userParentMsg == null) return parentNode;
+    if (!userParentMsg.isMine) return parentNode;
+
+    final userParts = userParentMsg.content.split(Config.userMsgModifierSep);
+    final userRawContent = userParts[0];
+    final userTail = userParts.length > 1 ? userParts.sublist(1).join(Config.userMsgModifierSep) : "";
+    if (!getIsBatch(userRawContent)) return parentNode;
+
+    final userBatch = userRawContent.split(Config.batchMarker);
+    if (selection >= userBatch.length) return parentNode;
+
+    final selectedQuestion = userBatch[selection];
+    final finalizedUserContent = userTail.isNotEmpty ? selectedQuestion + Config.userMsgModifierSep + userTail : selectedQuestion;
+    P.msg._syncMsg(
+      userParentMsg.id,
+      userParentMsg.copyWith(content: finalizedUserContent),
+    );
+
+    return parentNode;
+  }
+
+  List<ResponseStyleRoute> _resolveResponseStyleRoutesForMessage(Message message) {
+    final List<String>? labels = message.batchSlotLabels;
+    if (labels == null || labels.isEmpty) {
+      return responseStyle.q.enabledRoutesInOrder;
+    }
+    final List<ResponseStyleRoute> routes = <ResponseStyleRoute>[];
+    for (final String label in labels) {
+      final ResponseStyleRoute? route = responseStyleRouteFromLabel(label);
+      if (route == null) {
+        continue;
+      }
+      routes.add(route);
+    }
+    if (routes.isEmpty) {
+      return responseStyle.q.enabledRoutesInOrder;
+    }
+    return routes;
+  }
+
+  List<String> _buildSingleRouteHistory({
+    required List<String> history,
+    required ResponseStyleRoute route,
+    String? assistantMessage,
+  }) {
+    return route.buildHistory(
+      history: history,
+      assistantMessage: assistantMessage,
+    );
+  }
+
+  List<String> _replaceLatestHistoryMessage({
+    required List<String> history,
+    required String message,
+  }) {
+    final next = <String>[...history];
+    if (next.isEmpty) {
+      return <String>[message];
+    }
+    next[next.length - 1] = message;
+    return next;
+  }
+
+  List<String>? _resolveResponseStylePerSlotUserMessages({
+    required int messageId,
+    required int routeCount,
+  }) {
+    return _resolvePerSlotUserMessagesForBatch(
+      messageId: messageId,
+      batchCount: routeCount,
+    );
+  }
+
+  List<String>? _resolvePerSlotUserMessagesForBatch({
+    required int messageId,
+    required int batchCount,
+  }) {
+    final targetNode = P.msg.msgNode.q.findNodeByMsgId(messageId);
+    final userNode = targetNode?.parent;
+    if (userNode == null) return null;
+
+    final userMessage = P.msg.pool.q[userNode.id];
+    if (userMessage == null) return null;
+    if (!userMessage.isMine) return null;
+
+    final userParts = userMessage.content.split(Config.userMsgModifierSep);
+    final userRawContent = userParts[0];
+    if (!getIsBatch(userRawContent)) return null;
+
+    final (batch, isBatch, resolvedBatchCount, _) = getBatchInfo(userRawContent);
+    if (!isBatch) return null;
+    if (resolvedBatchCount < batchCount) return null;
+
+    final userTail = userParts.length > 1 ? userParts.sublist(1).join(Config.userMsgModifierSep) : "";
+    return <String>[
+      for (int i = 0; i < batchCount; i++) userTail.isNotEmpty ? batch[i] + userTail : batch[i],
+    ];
+  }
+
+  Future<bool> _sendResponseStyleRandomQuestions({
+    required List<ResponseStyleRoute> routes,
+    required List<String> questions,
+  }) async {
+    if (routes.length != questions.length) {
+      return false;
+    }
+
+    if (routes.length == 1) {
+      cancelEditing(clearInput: true);
+      focusNode.unfocus();
+      await _applyResponseStyleState(ResponseStyleState(enabledRoutes: routes));
+      await send(questions.first);
+      return true;
+    }
+
+    final parentNode = _prepareParentNodeForNewChatMessage();
+    if (parentNode == null) {
+      return false;
+    }
+
+    final currentModel = P.rwkvModel.latest.q;
+    if (currentModel == null) {
+      ModelSelector.show();
+      return false;
+    }
+
+    cancelEditing(clearInput: true);
+    focusNode.unfocus();
+    P.msg.clearBottomDetailsStateInScope(scope: "chat_bot_message_bottom");
+
+    final historyPrefix = _history();
+    await _applyResponseStyleState(ResponseStyleState(enabledRoutes: routes));
+    final thinkingMode = P.rwkvParams.thinkingMode.q;
+    final userBatchContent = buildBatchContent(questions);
+    final storedContent = userBatchContent + Config.userMsgModifierSep + thinkingMode.userMsgFooter;
+    final userMsgId = HF.milliseconds;
+    final userMsg = Message(
+      id: userMsgId,
+      content: storedContent,
+      isMine: true,
+      type: MessageType.text,
+      paused: false,
+    );
+    await P.msg._syncMsg(userMsgId, userMsg);
+    final botParentNode = parentNode.add(MsgNode(userMsgId));
+
+    final botMsgId = HF.milliseconds + 1;
+    final botMsg = Message(
+      id: botMsgId,
+      content: "",
+      isMine: false,
+      changing: true,
+      paused: false,
+      modelName: currentModel.name,
+      runningMode: thinkingMode.toString(),
+      rawDecodeParams: _resolveDecodeParamsSnapshotRaw(),
+      batchSlotLabels: routes.map((route) => route.label).toList(growable: false),
+    );
+    await P.msg._syncMsg(botMsgId, botMsg);
+    botParentNode.add(MsgNode(botMsgId));
+
+    P.msg.ids.q = P.msg.msgNode.q.latestMsgIdsWithoutRoot;
+    P.conversation._syncNode();
+    receiveId.q = botMsgId;
+    _setReceivedTokens("", immediateUi: true);
+    P.rwkvGeneration.generating.q = true;
+    _liveTokenCountThrottler.cancel();
+    _scheduleRefreshLiveTokenCounts(messageId: botMsgId, liveBotContent: "");
+
+    final slotConfigs = <to_rwkv.ChatBatchSlotConfig>[];
+    for (int i = 0; i < routes.length; i++) {
+      final route = routes[i];
+      String userContent = questions[i];
+      if (thinkingMode.userMsgFooter.isNotEmpty) {
+        userContent = userContent + thinkingMode.userMsgFooter;
+      }
+      slotConfigs.add(
+        to_rwkv.ChatBatchSlotConfig(
+          messages: _buildSingleRouteHistory(
+            history: <String>[...historyPrefix, userContent],
+            route: route,
+          ),
+          enableReasoning: true,
+          forceReasoning: false,
+          forceLang: route.forceLang,
+        ),
+      );
+    }
+
+    P.rwkvGeneration.sendMessages(
+      slotConfigs.first.messages,
+      overrideBatchSlotConfigs: slotConfigs,
+    );
+    _checkSensitive(userBatchContent);
+
+    34.msLater.then((_) {
+      scrollToBottom();
+    });
+    return true;
+  }
+
+  List<to_rwkv.ChatBatchSlotConfig> _buildResponseStyleSlotConfigs({
+    required List<String> history,
+    required List<ResponseStyleRoute> routes,
+    Map<ResponseStyleRoute, String?>? assistantMessages,
+    List<String>? perSlotUserMessages,
+  }) {
+    final slotConfigs = <to_rwkv.ChatBatchSlotConfig>[];
+    for (int i = 0; i < routes.length; i++) {
+      final route = routes[i];
+      final perSlotUserMessage = perSlotUserMessages != null && i < perSlotUserMessages.length ? perSlotUserMessages[i] : null;
+      final routeHistory = perSlotUserMessage == null
+          ? history
+          : _replaceLatestHistoryMessage(
+              history: history,
+              message: perSlotUserMessage,
+            );
+      slotConfigs.add(
+        to_rwkv.ChatBatchSlotConfig(
+          messages: _buildSingleRouteHistory(
+            history: routeHistory,
+            route: route,
+            assistantMessage: assistantMessages?[route],
+          ),
+          enableReasoning: true,
+          forceReasoning: false,
+          forceLang: route.forceLang,
+        ),
+      );
+    }
+    return slotConfigs;
+  }
+
+  Future<void> _setFastThinkingModeForResponseStyleBatch() async {
+    if (P.rwkvParams.thinkingMode.q == .fast) {
+      return;
+    }
+    await P.rwkvParams.setModelConfig(thinkingMode: .fast);
+  }
+
+  List<String> _buildRequestHistoryForResponseStyleRoute({
+    required List<String> history,
+    required ResponseStyleRoute route,
+    String? assistantMessage,
+  }) {
+    return route.buildHistory(
+      history: history,
+      assistantMessage: assistantMessage,
+    );
+  }
+
+  ({List<String> messages, List<to_rwkv.ChatBatchSlotConfig>? slotConfigs, int? forceLang})? _buildResponseStyleResumeRequest({
+    required int messageId,
+  }) {
+    if (P.app.pageKey.q != .chat) {
+      return null;
+    }
+
+    final Message? currentMessage = P.msg.pool.q[messageId];
+    if (currentMessage == null) {
+      return null;
+    }
+
+    final List<String>? baseHistory = _historyBeforeBotMessage(messageId: messageId);
+    if (baseHistory == null || baseHistory.isEmpty) {
+      return null;
+    }
+
+    final List<ResponseStyleRoute> routes = _resolveResponseStyleRoutesForMessage(currentMessage);
+    if (routes.isEmpty) {
+      return null;
+    }
+
+    if (routes.length == 1) {
+      final ResponseStyleRoute route = routes.first;
+      final String? assistantMessage = currentMessage.content.isNotEmpty ? currentMessage.content : null;
+      return (
+        messages: _buildSingleRouteHistory(
+          history: baseHistory,
+          route: route,
+          assistantMessage: assistantMessage,
+        ),
+        slotConfigs: null,
+        forceLang: route.forceLang,
+      );
+    }
+
+    final (List<String> batch, bool isBatch, int batchCount, int? selectedBatch) = getBatchInfo(currentMessage.content);
+    if (!isBatch) {
+      return null;
+    }
+    if (batchCount < routes.length) {
+      return null;
+    }
+    if (selectedBatch != null) {
+      return null;
+    }
+
+    final Map<ResponseStyleRoute, String?> assistantMessages = <ResponseStyleRoute, String?>{};
+    for (int i = 0; i < routes.length; i++) {
+      final ResponseStyleRoute route = routes[i];
+      final String rawValue = i < batch.length ? batch[i] : "";
+      assistantMessages[route] = rawValue;
+    }
+
+    return (
+      messages: baseHistory,
+      slotConfigs: _buildResponseStyleSlotConfigs(
+        history: baseHistory,
+        routes: routes,
+        assistantMessages: assistantMessages,
+        perSlotUserMessages: _resolveResponseStylePerSlotUserMessages(
+          messageId: messageId,
+          routeCount: routes.length,
+        ),
+      ),
+      forceLang: null,
+    );
+  }
+
+  ({List<String> messages, List<List<String>> batchMessages})? _buildBatchResumeRequest({
+    required int messageId,
+  }) {
+    if (P.app.pageKey.q != .chat) {
+      return null;
+    }
+
+    final Message? currentMessage = P.msg.pool.q[messageId];
+    if (currentMessage == null) {
+      return null;
+    }
+
+    final (List<String> batch, bool isBatch, int batchCount, int? selectedBatch) = getBatchInfo(currentMessage.content);
+    if (!isBatch) {
+      return null;
+    }
+    if (batchCount <= 1) {
+      return null;
+    }
+    if (selectedBatch != null) {
+      return null;
+    }
+
+    final List<String>? baseHistory = _historyBeforeBotMessage(messageId: messageId);
+    if (baseHistory == null || baseHistory.isEmpty) {
+      return null;
+    }
+
+    final List<String>? perSlotUserMessages = _resolvePerSlotUserMessagesForBatch(
+      messageId: messageId,
+      batchCount: batchCount,
+    );
+    final batchMessages = <List<String>>[];
+    for (int i = 0; i < batchCount; i++) {
+      final String partialAssistantMessage = i < batch.length ? batch[i] : "";
+      final String? perSlotUserMessage = perSlotUserMessages != null && i < perSlotUserMessages.length ? perSlotUserMessages[i] : null;
+      final List<String> slotHistory = perSlotUserMessage == null
+          ? <String>[...baseHistory]
+          : _replaceLatestHistoryMessage(
+              history: baseHistory,
+              message: perSlotUserMessage,
+            );
+      batchMessages.add(<String>[
+        ...slotHistory,
+        partialAssistantMessage,
+      ]);
+    }
+
+    if (batchMessages.isEmpty) {
+      return null;
+    }
+
+    return (
+      messages: batchMessages.first,
+      batchMessages: batchMessages,
+    );
+  }
+
+  void _clearResponseStyleSequentialState() {
+    _responseStyleSequentialActive = false;
+    _responseStyleSequentialStopRequested = false;
+    _responseStyleSequentialMessageId = null;
+    _responseStyleSequentialCurrentRouteIndex = 0;
+    _responseStyleSequentialForceChinese = false;
+    _responseStyleSequentialCurrentOutput = "";
+    _responseStyleSequentialCurrentAssistantMessage = null;
+    _responseStyleSequentialRoutes = const <ResponseStyleRoute>[];
+    _responseStyleSequentialBaseHistory = const <String>[];
+    _responseStyleSequentialCompletedOutputs = const <String>[];
+  }
+
+  String _buildResponseStyleSequentialBatchContent({
+    required List<String> completedOutputs,
+    String? currentOutput,
+    required int totalCount,
+  }) {
+    final List<String> slotOutputs = List<String>.filled(totalCount, "");
+    final int completedCount = math.min(completedOutputs.length, totalCount);
+    for (int i = 0; i < completedCount; i++) {
+      slotOutputs[i] = completedOutputs[i];
+    }
+    if (currentOutput != null && completedCount < totalCount) {
+      slotOutputs[completedCount] = currentOutput;
+    }
+    return buildBatchContent(slotOutputs);
+  }
+
+  Future<void> _sendCurrentResponseStyleSequentialRoute() async {
+    if (!_responseStyleSequentialActive) {
+      return;
+    }
+    if (_responseStyleSequentialCurrentRouteIndex >= _responseStyleSequentialRoutes.length) {
+      return;
+    }
+
+    final ResponseStyleRoute route = _responseStyleSequentialRoutes[_responseStyleSequentialCurrentRouteIndex];
+    final List<String> requestHistory = _buildRequestHistoryForResponseStyleRoute(
+      history: _responseStyleSequentialBaseHistory,
+      route: route,
+      assistantMessage: _responseStyleSequentialCurrentAssistantMessage,
+    );
+    _responseStyleSequentialCurrentAssistantMessage = null;
+    await P.rwkvGeneration.sendMessages(
+      requestHistory,
+      forceChinese: _responseStyleSequentialForceChinese,
+      forceLang: route.forceLang,
+    );
+  }
+
+  Future<void> _startResponseStyleSequentialGeneration({
+    required int messageId,
+    required List<String> history,
+    required List<ResponseStyleRoute> routes,
+    required bool forceChinese,
+    List<String> completedOutputs = const <String>[],
+    int startRouteIndex = 0,
+    String? currentAssistantMessage,
+  }) async {
+    await _setFastThinkingModeForResponseStyleBatch();
+    _responseStyleSequentialActive = true;
+    _responseStyleSequentialStopRequested = false;
+    _responseStyleSequentialMessageId = messageId;
+    _responseStyleSequentialCurrentRouteIndex = startRouteIndex;
+    _responseStyleSequentialForceChinese = forceChinese;
+    _responseStyleSequentialCurrentOutput = currentAssistantMessage ?? "";
+    _responseStyleSequentialCurrentAssistantMessage = currentAssistantMessage;
+    _responseStyleSequentialRoutes = <ResponseStyleRoute>[...routes];
+    _responseStyleSequentialBaseHistory = <String>[...history];
+    _responseStyleSequentialCompletedOutputs = <String>[...completedOutputs];
+    _setReceivedTokens(
+      _buildResponseStyleSequentialBatchContent(
+        completedOutputs: _responseStyleSequentialCompletedOutputs,
+        currentOutput: currentAssistantMessage,
+        totalCount: _responseStyleSequentialRoutes.length,
+      ),
+      immediateUi: true,
+    );
+    await _sendCurrentResponseStyleSequentialRoute();
+  }
+
+  Future<void> _advanceResponseStyleSequentialGenerationAfterStop() async {
+    if (!_responseStyleSequentialActive) {
+      return;
+    }
+
+    final int? messageId = _responseStyleSequentialMessageId;
+    if (messageId == null) {
+      _clearResponseStyleSequentialState();
+      return;
+    }
+
+    final String currentOutput = _responseStyleSequentialCurrentOutput;
+    final List<String> nextCompletedOutputs = <String>[
+      ..._responseStyleSequentialCompletedOutputs,
+      currentOutput,
+    ];
+    _responseStyleSequentialCompletedOutputs = nextCompletedOutputs;
+
+    final String finalizedContent = _buildResponseStyleSequentialBatchContent(
+      completedOutputs: nextCompletedOutputs,
+      totalCount: _responseStyleSequentialRoutes.length,
+    );
+    _setReceivedTokens(finalizedContent, immediateUi: true);
+
+    if (_responseStyleSequentialStopRequested) {
+      _clearResponseStyleSequentialState();
+      return;
+    }
+
+    final int nextRouteIndex = _responseStyleSequentialCurrentRouteIndex + 1;
+    if (nextRouteIndex >= _responseStyleSequentialRoutes.length) {
+      _clearResponseStyleSequentialState();
+      _fullyReceived(callingFunction: "_advanceResponseStyleSequentialGenerationAfterStop");
+      return;
+    }
+
+    _responseStyleSequentialCurrentRouteIndex = nextRouteIndex;
+    _responseStyleSequentialCurrentOutput = "";
+    _responseStyleSequentialCurrentAssistantMessage = null;
+    _scheduleRefreshLiveTokenCounts(
+      messageId: messageId,
+      liveBotContent: finalizedContent,
+    );
+    await _sendCurrentResponseStyleSequentialRoute();
+  }
+
+  bool _handleResponseStyleSequentialEvent(from_rwkv.FromRWKV event) {
+    if (!_responseStyleSequentialActive) {
+      return false;
+    }
+
+    final int? messageId = _responseStyleSequentialMessageId;
+    if (messageId == null) {
+      _clearResponseStyleSequentialState();
+      return false;
+    }
+
+    switch (event) {
+      case from_rwkv.GenerateStart _:
+        P.rwkvGeneration.generating.q = true;
+        return true;
+
+      case from_rwkv.ResponseBufferContent res:
+        _responseStyleSequentialCurrentOutput = res.responseBufferContent;
+        final String liveContent = _buildResponseStyleSequentialBatchContent(
+          completedOutputs: _responseStyleSequentialCompletedOutputs,
+          currentOutput: res.responseBufferContent,
+          totalCount: _responseStyleSequentialRoutes.length,
+        );
+        _setReceivedTokens(liveContent);
+        if (completionMode.q) {
+          return true;
+        }
+        _scheduleRefreshLiveTokenCounts(
+          messageId: messageId,
+          liveBotContent: liveContent,
+        );
+        _sensitiveThrottler.call(() {
+          _checkSensitive(liveContent);
+        });
+        return true;
+
+      case from_rwkv.GenerateStop _:
+        P.rwkvGeneration.generating.q = false;
+        unawaited(_advanceResponseStyleSequentialGenerationAfterStop());
+        return true;
+
+      default:
+        return false;
+    }
+  }
+
+  List<String> _resolveResponseStyleSequentialSlotOutputs({
+    required Message message,
+    required int routeCount,
+  }) {
+    final (List<String> batch, bool isBatch, int _, int? _) = getBatchInfo(message.content);
+    if (isBatch) {
+      final List<String> outputs = batch.take(routeCount).toList();
+      while (outputs.length < routeCount) {
+        outputs.add("");
+      }
+      return outputs;
+    }
+
+    final List<String> outputs = List<String>.filled(routeCount, "");
+    if (message.content.isNotEmpty) {
+      outputs[0] = message.content;
+    }
+    return outputs;
+  }
+
+  ({List<String> completedOutputs, int startRouteIndex, String? currentAssistantMessage}) _buildResponseStyleSequentialResumeState({
+    required List<String> slotOutputs,
+  }) {
+    int lastNonEmptyIndex = -1;
+    for (int i = 0; i < slotOutputs.length; i++) {
+      if (slotOutputs[i].trim().isEmpty) {
+        continue;
+      }
+      lastNonEmptyIndex = i;
+    }
+
+    if (lastNonEmptyIndex < 0) {
+      return (
+        completedOutputs: const <String>[],
+        startRouteIndex: 0,
+        currentAssistantMessage: null,
+      );
+    }
+
+    final List<String> completedOutputs = <String>[];
+    for (int i = 0; i < lastNonEmptyIndex; i++) {
+      completedOutputs.add(slotOutputs[i]);
+    }
+    return (
+      completedOutputs: completedOutputs,
+      startRouteIndex: lastNonEmptyIndex,
+      currentAssistantMessage: slotOutputs[lastNonEmptyIndex],
+    );
+  }
+
+  Future<bool> _resumeResponseStyleSequentialMessage({
+    required int messageId,
+  }) async {
+    if (P.app.pageKey.q != .chat) {
+      return false;
+    }
+
+    final Message? currentMessage = P.msg.pool.q[messageId];
+    if (currentMessage == null) {
+      return false;
+    }
+
+    final List<ResponseStyleRoute> routes = _resolveResponseStyleRoutesForMessage(currentMessage);
+    if (routes.length <= 1) {
+      return false;
+    }
+    if (_shouldUseResponseStyleBatchExecution(routes.length)) {
+      return false;
+    }
+
+    final List<String>? baseHistory = _historyBeforeBotMessage(messageId: messageId);
+    if (baseHistory == null || baseHistory.isEmpty) {
+      return false;
+    }
+
+    final List<String> slotOutputs = _resolveResponseStyleSequentialSlotOutputs(
+      message: currentMessage,
+      routeCount: routes.length,
+    );
+    final resumeState = _buildResponseStyleSequentialResumeState(slotOutputs: slotOutputs);
+
+    await _startResponseStyleSequentialGeneration(
+      messageId: messageId,
+      history: baseHistory,
+      routes: routes,
+      forceChinese: false,
+      completedOutputs: resumeState.completedOutputs,
+      startRouteIndex: resumeState.startRouteIndex,
+      currentAssistantMessage: resumeState.currentAssistantMessage,
+    );
+    _scheduleRefreshLiveTokenCounts(messageId: messageId, liveBotContent: receivedTokens.q);
+    return true;
   }
 
   // TODO: 适时去掉 preferredDemoType
@@ -351,6 +1271,7 @@ extension $Chat on _Chat {
     if (!checkModelSelection(preferredDemoType: preferredDemoType)) return;
 
     final inSee = P.app.pageKey.q == .see;
+
     if (inSee) {
       final hasAtLeastOneImage = P.msg.hasAtLeastOneImage.q;
       final imagePath = P.see.imagePath.q;
@@ -423,7 +1344,7 @@ extension $Chat on _Chat {
       final imagePath = P.see.imagePath.q;
       final isPureText = imagePath == null;
 
-      if (P.rwkv.generating.q) {
+      if (P.rwkvGeneration.generating.q) {
         // qqw("TODO:");
         // 1. 添加 message 至 queue
         // 2. 在 ui 上渲染 queue
@@ -441,7 +1362,7 @@ extension $Chat on _Chat {
         if (P.msg.hasAtLeastOneImage.q) {
           P.msg._clear();
           await 10.msLater;
-          P.rwkv.clearStates();
+          P.rwkvGeneration.clearStates();
           await 10.msLater;
         }
         await send("", type: MessageType.userImage, imageUrl: imagePath);
@@ -449,9 +1370,11 @@ extension $Chat on _Chat {
         final finalTextToSend = "<image>$imagePath</image>" + textToSend.trim();
         await send(finalTextToSend);
       }
-    } else {
-      await send(textToSend);
+
+      return;
     }
+
+    await send(textToSend);
   }
 
   Future<void> onEditingComplete() async {
@@ -462,7 +1385,7 @@ extension $Chat on _Chat {
     qqq(aString);
     final textToSend = textInInput.q.trim();
 
-    final generating = P.rwkv.generating.q;
+    final generating = P.rwkvGeneration.generating.q;
 
     if (generating) {
       Alert.info("Please wait for the previous message to be generated");
@@ -510,7 +1433,7 @@ extension $Chat on _Chat {
   }
 
   void onMessageTapped(Message msg) {
-    if (P.rwkv.currentWorldType.q != null) {
+    if (P.rwkvContext.currentWorldType.q != null) {
       Focus.of(getContext()!).unfocus();
     }
     focusNode.unfocus();
@@ -633,12 +1556,12 @@ extension $Chat on _Chat {
   }
 
   Future<void> startNewChat() async {
-    if (P.rwkv.generating.q) await onStopButtonPressed();
+    if (P.rwkvGeneration.generating.q) await onStopButtonPressed();
     await 100.msLater;
     // Alert.success(S.current.new_chat_started);
     dismissNewConversationGuide();
     P.msg._clear();
-    P.rwkv.clearStates();
+    P.rwkvGeneration.clearStates();
     P.conversation.currentCreatedAtUS.q = P.msg.msgNode.q.createAtInUS;
   }
 
@@ -648,18 +1571,18 @@ extension $Chat on _Chat {
   }
 
   void toggleCompletionMode() {
-    final receiving = P.rwkv.generating.q;
+    final receiving = P.rwkvGeneration.generating.q;
     if (receiving) {
       Alert.info(S.current.please_wait_for_the_model_to_finish_generating);
       return;
     }
     final r = !completionMode.q;
     completionMode.q = r;
-    P.rwkv.setGenerateMode(r);
+    P.rwkvParams.setGenerateMode(r);
   }
 
   Future<void> stopCompletion() async {
-    P.rwkv.stop();
+    P.rwkvGeneration.stop();
   }
 
   /// 拼装消息, 调用 rwkv 的 sendMessages 方法
@@ -678,10 +1601,11 @@ extension $Chat on _Chat {
     String message = raw;
 
     if (!checkModelSelection(preferredDemoType: .chat)) return;
+    _clearResponseStyleSequentialState();
 
-    final currentModel = P.rwkv.latestModel.q!;
+    final currentModel = P.rwkvModel.latest.q!;
 
-    final thinkingMode = P.rwkv.thinkingMode.q;
+    final thinkingMode = P.rwkvParams.thinkingMode.q;
 
     MsgNode? parentNode = P.msg.msgNode.q.wholeLatestNode;
     final editingOrRegeneratingIndex = P.msg.editingOrRegeneratingIndex.q;
@@ -731,15 +1655,20 @@ extension $Chat on _Chat {
         final selection = P.msg.batchSelection(parentMsg).q;
         if (selection != null) {
           final finalizedContent = parentMsg.content.split(Config.batchMarker)[selection];
-          final finalizedMsg = parentMsg.copyWith(content: finalizedContent);
+          final finalizedMsg = parentMsg.copyWith(
+            content: finalizedContent,
+            clearBatchSlotLabels: true,
+          );
           P.msg._syncMsg(parentMsg.id, finalizedMsg);
 
           // 重新计算 token count（从 batch 全量变为单 slot）
-          unawaited(_refreshTokenCountsForMessage(
-            messageId: parentMsg.id,
-            overrideBotContent: finalizedContent,
-            persistToMessage: true,
-          ));
+          unawaited(
+            _refreshTokenCountsForMessage(
+              messageId: parentMsg.id,
+              overrideBotContent: finalizedContent,
+              persistToMessage: true,
+            ),
+          );
 
           // Also finalize the paired user batch message if it exists
           final userParentNode = P.msg.msgNode.q.findParentByMsgId(parentMsg.id);
@@ -800,12 +1729,10 @@ extension $Chat on _Chat {
     final receiveId = HF.milliseconds + 1;
     this.receiveId.q = receiveId;
 
-    List<String> history = withHistory ? _history() : <String>[];
-
     P.msg.editingOrRegeneratingIndex.q = null;
 
-    receivedTokens.q = "";
-    P.rwkv.generating.q = true;
+    _setReceivedTokens("", immediateUi: true);
+    P.rwkvGeneration.generating.q = true;
     _liveTokenCountThrottler.cancel();
 
     final receiveMsg = Message(
@@ -817,21 +1744,75 @@ extension $Chat on _Chat {
       modelName: currentModel.name,
       runningMode: thinkingMode.toString(),
       rawDecodeParams: _resolveDecodeParamsSnapshotRaw(),
+      batchSlotLabels: P.app.pageKey.q == .chat && responseStyle.q.activeCount > 1 ? responseStyle.q.enabledLabelsInOrder : null,
     );
 
     P.msg.pool.q[receiveId] = receiveMsg;
     parentNode.add(MsgNode(receiveId));
     P.msg.ids.q = P.msg.msgNode.q.latestMsgIdsWithoutRoot;
     P.conversation._syncNode();
+    if (P.app.pageKey.q == .chat && fakeBatchInferenceBenchmarkEnabled.q) {
+      final benchmarkBatchSize = effectiveBatchEnabled.q ? effectiveBatchCount.q : 1;
+      _startFakeBatchInferenceBenchmark(
+        messageId: receiveId,
+        batchSize: benchmarkBatchSize,
+      );
+      return;
+    }
     _scheduleRefreshLiveTokenCounts(messageId: receiveId, liveBotContent: "");
 
+    List<String> history = withHistory ? _history(excludedMessageId: receiveId) : <String>[];
     history = withHistory ? await _historyWithWebSearch(receiveId, history) : [message];
     final inSee = P.app.pageKey.q == .see;
-    final batchSize = inSee ? 1 : (batchEnabled.q ? batchCount.q : 1);
-
     final forceChinese = inSee && message.containsChinese;
 
-    P.rwkv.sendMessages(history, batchSize: batchSize, forceChinese: forceChinese);
+    if (!inSee) {
+      final List<ResponseStyleRoute> routes = responseStyle.q.enabledRoutesInOrder;
+      if (routes.length > 1) {
+        await _setFastThinkingModeForResponseStyleBatch();
+        if (_shouldUseResponseStyleBatchExecution(routes.length)) {
+          final List<to_rwkv.ChatBatchSlotConfig> slotConfigs = _buildResponseStyleSlotConfigs(
+            history: history,
+            routes: routes,
+          );
+          P.rwkvGeneration.sendMessages(
+            history,
+            forceChinese: forceChinese,
+            overrideBatchSlotConfigs: slotConfigs,
+          );
+          _checkSensitive(raw);
+          return;
+        }
+        final int currentReceiveId = this.receiveId.q!;
+        unawaited(
+          _startResponseStyleSequentialGeneration(
+            messageId: currentReceiveId,
+            history: history,
+            routes: routes,
+            forceChinese: forceChinese,
+          ),
+        );
+        _checkSensitive(raw);
+        return;
+      }
+
+      final ResponseStyleRoute route = routes.first;
+      final List<String> singleRouteHistory = _buildRequestHistoryForResponseStyleRoute(
+        history: history,
+        route: route,
+      );
+      P.rwkvGeneration.sendMessages(
+        singleRouteHistory,
+        batchSize: effectiveBatchEnabled.q ? effectiveBatchCount.q : 1,
+        forceChinese: forceChinese,
+        forceLang: route.forceLang,
+      );
+      _checkSensitive(raw);
+      return;
+    }
+
+    final batchSize = inSee ? 1 : (effectiveBatchEnabled.q ? effectiveBatchCount.q : 1);
+    P.rwkvGeneration.sendMessages(history, batchSize: batchSize, forceChinese: forceChinese);
 
     _checkSensitive(raw);
   }
@@ -845,7 +1826,7 @@ extension $Chat on _Chat {
       qqw("message id is null");
       return;
     }
-    if (!P.rwkv.generating.q) {
+    if (!P.rwkvGeneration.generating.q) {
       return;
     }
     _pauseMessageById(id: id);
@@ -854,6 +1835,7 @@ extension $Chat on _Chat {
   Future<void> resumeMessageById({required int id, bool withHaptic = true}) async {
     qq;
     if (withHaptic) P.app.hapticLight();
+    _clearResponseStyleSequentialState();
     receiveId.q = id;
     _updateMessageById(
       id: id,
@@ -862,24 +1844,74 @@ extension $Chat on _Chat {
       callingFunction: "resumeMessageById",
     );
     _liveTokenCountThrottler.cancel();
-    P.rwkv.sendMessages(_history(), batchSize: batchEnabled.q ? batchCount.q : 1);
+    final bool resumedSequentially = await _resumeResponseStyleSequentialMessage(messageId: id);
+    if (resumedSequentially) {
+      return;
+    }
+    final responseStyleResumeRequest = _buildResponseStyleResumeRequest(messageId: id);
+    if (responseStyleResumeRequest != null) {
+      if (responseStyleResumeRequest.slotConfigs != null) {
+        await _setFastThinkingModeForResponseStyleBatch();
+      }
+      P.rwkvGeneration.sendMessages(
+        responseStyleResumeRequest.messages,
+        batchSize: responseStyleResumeRequest.slotConfigs == null && effectiveBatchEnabled.q ? effectiveBatchCount.q : 1,
+        overrideBatchSlotConfigs: responseStyleResumeRequest.slotConfigs,
+        forceLang: responseStyleResumeRequest.forceLang,
+      );
+      _scheduleRefreshLiveTokenCounts(messageId: id, liveBotContent: receivedTokens.q);
+      return;
+    }
+    final batchResumeRequest = _buildBatchResumeRequest(messageId: id);
+    if (batchResumeRequest != null) {
+      P.rwkvGeneration.sendMessages(
+        batchResumeRequest.messages,
+        batchSize: batchResumeRequest.batchMessages.length,
+        overrideBatchMessages: batchResumeRequest.batchMessages,
+      );
+      _scheduleRefreshLiveTokenCounts(messageId: id, liveBotContent: receivedTokens.q);
+      return;
+    }
+    P.rwkvGeneration.sendMessages(_history(), batchSize: effectiveBatchEnabled.q ? effectiveBatchCount.q : 1);
     _scheduleRefreshLiveTokenCounts(messageId: id, liveBotContent: receivedTokens.q);
   }
 
-  Future<void> onBatchInferenceSwitchChanged(bool value) async {
-    P.app.hapticLight();
-    batchEnabled.q = value;
-    if (wenYanWen.q == WenyanMode.mixed && !value) {
-      wenYanWen.q = WenyanMode.off;
+  Future<void> onBatchInferenceSwitchChanged(
+    bool value, {
+    bool triggeredByResponseStyle = false,
+  }) async {
+    if (!triggeredByResponseStyle) {
+      P.app.hapticLight();
+      if (responseStyle.q.activeCount > 1) {
+        resetResponseStyle();
+        return;
+      }
     }
 
-    if (!value) return;
+    final currentModel = P.rwkvModel.latest.q;
+    if (value && !(currentModel?.supportsBatchInference ?? false)) {
+      batchEnabled.q = false;
+      batchCount.q = Argument.batchCount.defaults.toInt();
+      if (triggeredByResponseStyle && responseStyle.q.activeCount > 1) {
+        responseStyle.q = const ResponseStyleState();
+      }
+      if (!triggeredByResponseStyle) {
+        Alert.info(S.current.this_model_does_not_support_batch_inference);
+      }
+      return;
+    }
 
-    final temperature = P.rwkv.arguments(Argument.temperature).q;
-    final topP = P.rwkv.arguments(Argument.topP).q;
-    final presencePenalty = P.rwkv.arguments(Argument.presencePenalty).q;
-    final frequencyPenalty = P.rwkv.arguments(Argument.frequencyPenalty).q;
-    final penaltyDecay = P.rwkv.arguments(Argument.penaltyDecay).q;
+    batchEnabled.q = value;
+    if (!value) {
+      batchCount.q = Argument.batchCount.defaults.toInt();
+      return;
+    }
+
+    final temperature = P.rwkvParams.arguments(Argument.temperature).q;
+    final topP = P.rwkvParams.arguments(Argument.topP).q;
+    final presencePenalty = P.rwkvParams.arguments(Argument.presencePenalty).q;
+    final frequencyPenalty = P.rwkvParams.arguments(Argument.frequencyPenalty).q;
+    final penaltyDecay = P.rwkvParams.arguments(Argument.penaltyDecay).q;
 
     final newValue = List<SamplerAndPenaltyParam>.generate(
       100,
@@ -892,12 +1924,12 @@ extension $Chat on _Chat {
       ),
     );
 
-    P.rwkv.frontendBatchParams.q = newValue;
-    final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
+    P.rwkvParams.frontendBatchParams.q = newValue;
+    final modelID = P.rwkvModel.findModelIDByWeightType(weightType: .chat);
     if (modelID == null) {
       return;
     }
-    P.rwkv.send(
+    P.rwkvBridge.send(
       to_rwkv.SetSamplerAndPenaltyParams(
         temperatures: newValue.map((e) => e.temperature).toList(),
         topKs: newValue.map((_) => 500.0).toList(),
@@ -908,76 +1940,26 @@ extension $Chat on _Chat {
         modelID: modelID,
       ),
     );
-    final batchCount = this.batchCount.q;
-    P.rwkv.send(to_rwkv.GetSamplerAndPenaltyParams(batchSize: batchCount, modelID: modelID));
+    final currentBatchCount = batchCount.q;
+    P.rwkvBridge.send(to_rwkv.GetSamplerAndPenaltyParams(batchSize: currentBatchCount, modelID: modelID));
+  }
+
+  void onManualBatchCountChanged(int value) {
+    if (batchCount.q == value) {
+      return;
+    }
+    batchCount.q = value;
+    if (responseStyle.q.activeCount > 1 && value != responseStyle.q.activeCount) {
+      resetResponseStyle();
+    }
   }
 
   Future<void> tryLoadLastChatModel() async {
-    await 500.msLater;
-
-    final last = P.preference.lastChatModel.q;
-    if (last == null) {
-      ModelSelector.show(showNeko: P.app.pageKey.q == .neko);
-      return;
-    }
-
-    final String savedFileName = last["fileName"];
-    final int savedFileSize = last["fileSize"];
-
-    final fileInfo = P.remote.chatWeights.q.firstWhereOrNull(
-      (e) => e.fileName == savedFileName && e.fileSize == savedFileSize,
-    );
-    final localFile = fileInfo != null ? P.remote.locals(fileInfo).q : null;
-
-    if (fileInfo == null || localFile == null || !localFile.hasFile || fileInfo.backend == null) {
-      ModelSelector.show(showNeko: P.app.pageKey.q == .neko);
-      return;
-    }
-
-    // 以上校验通过，确认将要自动加载，开始显示加载动画
     isAutoLoadingModel.q = true;
     try {
-      P.rwkv.clearStates();
-      await P.rwkv.loadChat(fileInfo: fileInfo);
-
-      final batchAllowed = fileInfo.tags.contains("batch");
-      if (!batchAllowed) batchEnabled.q = false;
-
-      final isTranslate = fileInfo.tags.contains("translate");
-      final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
-      if (modelID == null) return;
-
-      if (isTranslate) {
-        if (P.translator.enToZh.q) {
-          P.rwkv.send(to_rwkv.SetUserRole("English", modelID: modelID));
-          P.rwkv.send(to_rwkv.SetResponseRole(responseRole: "Chinese", modelID: modelID));
-        } else {
-          P.rwkv.send(to_rwkv.SetUserRole("Chinese", modelID: modelID));
-          P.rwkv.send(to_rwkv.SetResponseRole(responseRole: "English", modelID: modelID));
-        }
-        await P.rwkv.setModelConfig(thinkingMode: .none, prompt: "<EOD>", setPrompt: true);
-        P.backend.start();
-      } else {
-        P.rwkv.send(to_rwkv.SetUserRole("User", modelID: modelID));
-        P.rwkv.send(to_rwkv.SetResponseRole(responseRole: "Assistant", modelID: modelID));
-      }
-
-      if (!isTranslate) {
-        if (P.rwkv.currentModelIsBefore20250922.q) {
-          P.rwkv.setModelConfig(thinkingMode: .lighting);
-        } else {
-          P.rwkv.setModelConfig(thinkingMode: .fast);
-        }
-      }
-
-      for (var i = 0; i < 3; i++) {
-        (500 * i).msLater.then((_) {
-          P.rwkv.send(to_rwkv.GetSupportedBatchSizes(modelID: modelID));
-        });
-      }
+      await P.rwkvAutoLoad.restoreForPage(P.app.pageKey.q);
     } catch (e) {
       qqe("Failed to auto load chat model: $e");
-      ModelSelector.show(showNeko: P.app.pageKey.q == .neko);
     } finally {
       isAutoLoadingModel.q = false;
     }
@@ -986,6 +1968,81 @@ extension $Chat on _Chat {
 
 /// Private methods
 extension _$Chat on _Chat {
+  void _setReceivedTokens(String value, {bool immediateUi = false}) {
+    receivedTokens.q = value;
+    _latestVisibleReceivedTokens = value;
+    if (immediateUi) {
+      _flushVisibleReceivedTokens();
+      return;
+    }
+    if (_visibleReceivedTokensTimer != null) return;
+    _visibleReceivedTokensTimer = Timer(_visibleReceivedTokensInterval, _flushVisibleReceivedTokens);
+  }
+
+  void _flushVisibleReceivedTokens() {
+    _visibleReceivedTokensTimer?.cancel();
+    _visibleReceivedTokensTimer = null;
+    final value = _latestVisibleReceivedTokens;
+    if (visibleReceivedTokens.q == value) return;
+    visibleReceivedTokens.q = value;
+  }
+
+  int _runtimeMaxSupportedBatchCount() {
+    final supportedBatchSizes = P.rwkvParams.supportedBatchSizes.q;
+    if (supportedBatchSizes.isEmpty) return 0;
+    return math.max(1, supportedBatchSizes.max);
+  }
+
+  int _normalizeExpectedBatchCount(int value, {required int runtimeMaxBatchCount}) {
+    if (value <= 1) return 1;
+    if (runtimeMaxBatchCount > 1 && value > runtimeMaxBatchCount) return 0;
+    return value;
+  }
+
+  int _resolveExpectedBatchResponseCount({
+    required Message? message,
+    required from_rwkv.ResponseBatchBufferContent response,
+    required int runtimeMaxBatchCount,
+  }) {
+    final labels = message?.batchSlotLabels;
+    final labelCount = _normalizeExpectedBatchCount(labels?.length ?? 0, runtimeMaxBatchCount: runtimeMaxBatchCount);
+    if (labelCount > 1) return labelCount;
+
+    final decodeParamCount = _normalizeExpectedBatchCount(
+      message?.parsedDecodeParams.length ?? 0,
+      runtimeMaxBatchCount: runtimeMaxBatchCount,
+    );
+    if (decodeParamCount > 1) return decodeParamCount;
+
+    final effectiveCount = _normalizeExpectedBatchCount(
+      effectiveBatchEnabled.q ? effectiveBatchCount.q : 1,
+      runtimeMaxBatchCount: runtimeMaxBatchCount,
+    );
+    if (effectiveCount > 1) return effectiveCount;
+
+    final responseBatchCount = _normalizeExpectedBatchCount(response.batchSize, runtimeMaxBatchCount: runtimeMaxBatchCount);
+    if (responseBatchCount > 1) return responseBatchCount;
+
+    return _normalizeExpectedBatchCount(response.responseBufferContent.length, runtimeMaxBatchCount: runtimeMaxBatchCount);
+  }
+
+  String _buildBatchResponseBufferContent(from_rwkv.ResponseBatchBufferContent response) {
+    final currentReceiveId = receiveId.q;
+    final message = currentReceiveId == null ? null : P.msg.pool.q[currentReceiveId];
+    final runtimeMaxBatchCount = _runtimeMaxSupportedBatchCount();
+    final expectedBatchCount = _resolveExpectedBatchResponseCount(
+      message: message,
+      response: response,
+      runtimeMaxBatchCount: runtimeMaxBatchCount,
+    );
+    final normalized = normalizeBatchResponseBufferContent(
+      responseBufferContent: response.responseBufferContent,
+      expectedBatchCount: expectedBatchCount,
+      maxBatchSlotCount: runtimeMaxBatchCount,
+    );
+    return buildBatchContent(normalized);
+  }
+
   Future<void> _init() async {
     switch (P.app.demoType.q) {
       case .fifthteenPuzzle:
@@ -998,13 +2055,15 @@ extension _$Chat on _Chat {
     }
     qq;
 
+    fakeBatchInferenceBenchmarkEnabled.q = P.preference.fakeBatchInferenceBenchmarkEnabled;
+
     textEditingController.addListener(_onTextEditingControllerValueChanged);
     textInInput.l(_onTextChanged);
 
     P.app.pageKey.l(_onPageKeyChanged);
 
-    P.rwkv.oldBroadcastStream.listen(_onOldStreamEvent, onDone: _onStreamDone, onError: _onStreamError);
-    final event = P.rwkv.broadcastStream;
+    P.rwkvBridge.oldBroadcastStream.listen(_onOldStreamEvent, onDone: _onStreamDone, onError: _onStreamError);
+    final event = P.rwkvBridge.broadcastStream;
     event.listen(_onStreamEvent, onDone: _onStreamDone, onError: _onStreamError);
 
     /// update the conversation subtitle
@@ -1013,8 +2072,15 @@ extension _$Chat on _Chat {
         .where((e) => P.msg.list.q.length <= 2)
         .throttleTime(const Duration(milliseconds: 500), trailing: true, leading: true)
         .listen((e) {
-          final r = e.responseBufferContent.replaceAll('\n', '').replaceAll('</think>', '').replaceAll('<think>', '');
-          P.conversation.updateCurrentConvSubtitle(r);
+          unawaited(P.conversation.updateCurrentConvSubtitleFromResponseContent(e.responseBufferContent));
+        });
+    event
+        .whereType<from_rwkv.ResponseBatchBufferContent>()
+        .where((e) => P.msg.list.q.length <= 2)
+        .throttleTime(const Duration(milliseconds: 500), trailing: true, leading: true)
+        .listen((e) {
+          final content = _buildBatchResponseBufferContent(e);
+          unawaited(P.conversation.updateCurrentConvSubtitleFromResponseContent(content));
         });
 
     P.see.audioFileStreamController.stream.listen(_onNewFileReceived);
@@ -1022,11 +2088,9 @@ extension _$Chat on _Chat {
     hasFocus.q = focusNode.hasFocus;
     P.app.lifecycleState.lb(_onLifecycleStateChanged);
 
-    P.rwkv.supportedBatchSizes.l(_onSupportedBatchSizesChanged);
+    P.rwkvParams.supportedBatchSizes.l(_onSupportedBatchSizesChanged);
 
     batchCount.l(_onBatchCountChanged);
-    batchVW.l(_onBatchVWChanged);
-    _loadBatchVW();
 
     scrollController.addListener(_onScroll);
     P.msg.ids.l(_onMessageIdsChangedForTokenCount);
@@ -1048,8 +2112,8 @@ extension _$Chat on _Chat {
     required int? conversationTokensCount,
   }) {
     if (conversationTokensCount == null) return;
-    final int effectiveBatchCount = batchEnabled.q ? batchCount.q : 1;
-    final int threshold = Config.newConversationTokenReminderThreshold * effectiveBatchCount;
+    final int currentEffectiveBatchCount = effectiveBatchEnabled.q ? effectiveBatchCount.q : 1;
+    final int threshold = Config.newConversationTokenReminderThreshold * currentEffectiveBatchCount;
     if (conversationTokensCount < threshold) return;
 
     final conversationId = P.msg.msgNode.q.createAtInUS;
@@ -1065,18 +2129,22 @@ extension _$Chat on _Chat {
   }
 
   void _onBatchCountChanged(int value) async {
+    if (responseStyle.q.activeCount > 1 && value != responseStyle.q.activeCount) {
+      resetResponseStyle();
+    }
+
     late final List<SamplerAndPenaltyParam> newFrontendBatchParams;
     newFrontendBatchParams = [
-      ...P.rwkv.frontendBatchParams.q,
-      P.rwkv.frontendBatchParams.q.last,
+      ...P.rwkvParams.frontendBatchParams.q,
+      P.rwkvParams.frontendBatchParams.q.last,
     ];
 
-    P.rwkv.frontendBatchParams.q = newFrontendBatchParams;
-    final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
+    P.rwkvParams.frontendBatchParams.q = newFrontendBatchParams;
+    final modelID = P.rwkvModel.findModelIDByWeightType(weightType: .chat);
     if (modelID == null) {
       return;
     }
-    P.rwkv.send(
+    P.rwkvBridge.send(
       to_rwkv.SetSamplerAndPenaltyParams(
         temperatures: newFrontendBatchParams.map((e) => e.temperature).toList(),
         topKs: newFrontendBatchParams.map((_) => 500.0).toList(),
@@ -1087,31 +2155,222 @@ extension _$Chat on _Chat {
         modelID: modelID,
       ),
     );
-    P.rwkv.send(to_rwkv.GetSamplerAndPenaltyParams(batchSize: value, modelID: modelID));
-  }
-
-  void _onBatchVWChanged(int value) async {
-    final sp = await SharedPreferences.getInstance();
-    await sp.setInt("halo_state.batchVW", value);
-  }
-
-  void _loadBatchVW() async {
-    final sp = await SharedPreferences.getInstance();
-    final saved = sp.getInt("halo_state.batchVW");
-    if (saved != null) batchVW.q = saved;
+    P.rwkvBridge.send(to_rwkv.GetSamplerAndPenaltyParams(batchSize: value, modelID: modelID));
   }
 
   void _onSupportedBatchSizesChanged(List<int> supportedBatchSizes) {
+    final currentModel = P.rwkvModel.latest.q;
+    if (currentModel != null && !currentModel.supportsBatchInference) {
+      batchEnabled.q = false;
+      batchCount.q = Argument.batchCount.defaults.toInt();
+      if (responseStyle.q.activeCount > 1) {
+        responseStyle.q = const ResponseStyleState();
+      }
+      return;
+    }
+
     if (supportedBatchSizes.isEmpty) {
       batchEnabled.q = false;
       batchCount.q = Argument.batchCount.defaults.toInt();
-      if (wenYanWen.q == WenyanMode.mixed) {
-        wenYanWen.q = WenyanMode.off;
+      if (responseStyle.q.activeCount > 1) {
+        responseStyle.q = const ResponseStyleState();
       }
       return;
     }
     final max = supportedBatchSizes.max;
+    if (responseStyle.q.activeCount > 1 && max < responseStyle.q.activeCount) {
+      resetResponseStyle();
+      return;
+    }
     if (max < batchCount.q) batchCount.q = max;
+  }
+
+  void _startFakeBatchInferenceBenchmark({
+    required int messageId,
+    required int batchSize,
+  }) {
+    _cancelFakeBatchInferenceBenchmark();
+
+    final int effectiveBatchSize = math.max(1, batchSize);
+    final int updatesPerSecond = math.max(1, effectiveBatchSize * 20);
+    final int intervalInMilliseconds = math.max(1, 1000 ~/ updatesPerSecond);
+
+    _fakeBatchInferenceBenchmarkMessageId = messageId;
+    _fakeBatchInferenceBenchmarkFixedTargetsBySlot = _buildFakeBatchInferenceBenchmarkFixedTargets(
+      effectiveBatchSize,
+    );
+    _fakeBatchInferenceBenchmarkSlotStates = List<_FakeBatchInferenceBenchmarkSlotState>.generate(
+      effectiveBatchSize,
+      _createFakeBatchInferenceBenchmarkSlotState,
+    );
+    _fakeBatchInferenceBenchmarkSlotIndex = 0;
+    _fakeBatchInferenceBenchmarkTick = 0;
+    _setReceivedTokens(_buildFakeBatchInferenceBenchmarkContent(), immediateUi: true);
+
+    _fakeBatchInferenceBenchmarkTimer = Timer.periodic(
+      Duration(milliseconds: intervalInMilliseconds),
+      (Timer timer) {
+        final int? activeMessageId = _fakeBatchInferenceBenchmarkMessageId;
+        if (activeMessageId != messageId) {
+          timer.cancel();
+          return;
+        }
+
+        final message = P.msg.pool.q[messageId];
+        if (message == null || !message.changing || !P.rwkvGeneration.generating.q) {
+          _cancelFakeBatchInferenceBenchmark(updateGenerating: true);
+          return;
+        }
+
+        final int activeBatchSize = _fakeBatchInferenceBenchmarkSlotStates.length;
+        if (activeBatchSize <= 0) {
+          _cancelFakeBatchInferenceBenchmark(updateGenerating: true);
+          return;
+        }
+
+        final int slotIndex = _findNextFakeBatchInferenceBenchmarkSlotIndex(activeBatchSize);
+        if (slotIndex < 0) {
+          _cancelFakeBatchInferenceBenchmark(updateGenerating: true);
+          return;
+        }
+
+        _advanceFakeBatchInferenceBenchmarkSlot(slotIndex);
+        _fakeBatchInferenceBenchmarkTick++;
+        _fakeBatchInferenceBenchmarkSlotIndex = (slotIndex + 1) % activeBatchSize;
+        _setReceivedTokens(_buildFakeBatchInferenceBenchmarkContent());
+      },
+    );
+  }
+
+  String _buildFakeBatchInferenceBenchmarkContent() {
+    if (_fakeBatchInferenceBenchmarkSlotStates.isEmpty) {
+      return "";
+    }
+    final List<String> slotOutputs = _fakeBatchInferenceBenchmarkSlotStates.map((e) => e.content).toList();
+    if (slotOutputs.length == 1) {
+      return slotOutputs.first;
+    }
+    return buildBatchContent(slotOutputs);
+  }
+
+  String _nextFakeBatchInferenceBenchmarkChunk() {
+    final int length = 3 + _fakeBatchInferenceBenchmarkRandom.nextInt(3);
+    final buffer = StringBuffer();
+    for (int i = 0; i < length; i++) {
+      final int index = _fakeBatchInferenceBenchmarkRandom.nextInt(_fakeBatchInferenceBenchmarkCharacterPool.length);
+      buffer.write(_fakeBatchInferenceBenchmarkCharacterPool[index]);
+    }
+    return buffer.toString();
+  }
+
+  _FakeBatchInferenceBenchmarkSlotState _createFakeBatchInferenceBenchmarkSlotState(int index) {
+    final int targetLength = _fakeBatchInferenceBenchmarkFixedTargetsBySlot[index] ?? 1 << 30;
+    final int intervalMultiplier = 1 + _fakeBatchInferenceBenchmarkRandom.nextInt(4);
+    return _FakeBatchInferenceBenchmarkSlotState(
+      content: "",
+      targetLength: targetLength,
+      intervalMultiplier: intervalMultiplier,
+      completed: false,
+    );
+  }
+
+  Map<int, int> _buildFakeBatchInferenceBenchmarkFixedTargets(int batchSize) {
+    if (batchSize <= 0) {
+      return const <int, int>{};
+    }
+
+    final List<int> slotIndexes = List<int>.generate(batchSize, (index) => index);
+    slotIndexes.shuffle(_fakeBatchInferenceBenchmarkRandom);
+
+    final Map<int, int> result = <int, int>{};
+    final int fixedCount = math.min(batchSize, _fakeBatchInferenceBenchmarkFixedTargetLengths.length);
+    for (int i = 0; i < fixedCount; i++) {
+      result[slotIndexes[i]] = _fakeBatchInferenceBenchmarkFixedTargetLengths[i];
+    }
+    return result;
+  }
+
+  int _findNextFakeBatchInferenceBenchmarkSlotIndex(int activeBatchSize) {
+    for (int offset = 0; offset < activeBatchSize; offset++) {
+      final int candidate = (_fakeBatchInferenceBenchmarkSlotIndex + offset) % activeBatchSize;
+      final slotState = _fakeBatchInferenceBenchmarkSlotStates[candidate];
+      if (slotState.completed) {
+        continue;
+      }
+      if (_fakeBatchInferenceBenchmarkTick % slotState.intervalMultiplier != 0) {
+        continue;
+      }
+      return candidate;
+    }
+
+    for (int offset = 0; offset < activeBatchSize; offset++) {
+      final int candidate = (_fakeBatchInferenceBenchmarkSlotIndex + offset) % activeBatchSize;
+      final slotState = _fakeBatchInferenceBenchmarkSlotStates[candidate];
+      if (!slotState.completed) {
+        return candidate;
+      }
+    }
+    return -1;
+  }
+
+  void _advanceFakeBatchInferenceBenchmarkSlot(int slotIndex) {
+    final slotState = _fakeBatchInferenceBenchmarkSlotStates[slotIndex];
+    if (slotState.completed) {
+      return;
+    }
+
+    final String nextChunk = _nextFakeBatchInferenceBenchmarkChunk();
+    final int remaining = slotState.targetLength - slotState.content.length;
+    if (remaining <= 0) {
+      _fakeBatchInferenceBenchmarkSlotStates[slotIndex] = slotState.copyWith(completed: true);
+      return;
+    }
+
+    final String appended = nextChunk.length <= remaining ? nextChunk : nextChunk.substring(0, remaining);
+    final String newContent = slotState.content + appended;
+    final bool completed = newContent.length >= slotState.targetLength;
+    _fakeBatchInferenceBenchmarkSlotStates[slotIndex] = slotState.copyWith(
+      content: newContent,
+      completed: completed,
+    );
+  }
+
+  Future<bool> _pauseFakeBatchInferenceBenchmarkMessage({
+    required int id,
+    required Message msg,
+    required bool isSensitive,
+  }) async {
+    if (_fakeBatchInferenceBenchmarkMessageId != id) {
+      return false;
+    }
+
+    final currentGeneratedContent = receivedTokens.q;
+    final finalizedContent = currentGeneratedContent.isNotEmpty ? currentGeneratedContent : msg.content;
+    _cancelFakeBatchInferenceBenchmark(updateGenerating: true);
+
+    final newMsg = msg.copyWith(
+      content: finalizedContent,
+      paused: true,
+      changing: false,
+      isSensitive: isSensitive,
+    );
+    await P.msg._syncMsg(id, newMsg);
+    return true;
+  }
+
+  void _cancelFakeBatchInferenceBenchmark({bool updateGenerating = false}) {
+    final timer = _fakeBatchInferenceBenchmarkTimer;
+    final active = timer != null || _fakeBatchInferenceBenchmarkMessageId != null;
+    timer?.cancel();
+    _fakeBatchInferenceBenchmarkTimer = null;
+    _fakeBatchInferenceBenchmarkMessageId = null;
+    _fakeBatchInferenceBenchmarkSlotStates = const <_FakeBatchInferenceBenchmarkSlotState>[];
+    _fakeBatchInferenceBenchmarkSlotIndex = 0;
+    _fakeBatchInferenceBenchmarkTick = 0;
+    _fakeBatchInferenceBenchmarkFixedTargetsBySlot = const <int, int>{};
+    if (active && updateGenerating) {
+      P.rwkvGeneration.generating.q = false;
+    }
   }
 
   Future<void> _checkSensitive(String content) async {
@@ -1133,7 +2392,7 @@ extension _$Chat on _Chat {
     if (P.app.isDesktop.q) return;
     final isToBackground = next == AppLifecycleState.paused || next == AppLifecycleState.hidden;
     if (isToBackground) {
-      if (receiveId.q != null && _autoPauseId.q == null && P.rwkv.generating.q == true) {
+      if (receiveId.q != null && _autoPauseId.q == null && P.rwkvGeneration.generating.q == true) {
         _autoPauseId.q = receiveId.q!;
         _pauseMessageById(id: receiveId.q!);
       }
@@ -1147,41 +2406,65 @@ extension _$Chat on _Chat {
   }
 
   /// 获取历史记录
-  List<String> _history() {
-    final messages = P.msg.list.q.where((msg) => msg.type == MessageType.text).toList();
+  List<String> _history({int? excludedMessageId}) {
+    return buildChatHistory(
+      messages: P.msg.list.q,
+      newChatTemplate: P.preference.promptTemplate.newChatTemplate,
+      excludedMessageId: excludedMessageId,
+    );
+  }
 
-    if (messages.isEmpty) return [];
+  List<String>? _historyBeforeBotMessage({required int messageId}) {
+    final MsgNode? targetNode = P.msg.msgNode.q.findNodeByMsgId(messageId);
+    final MsgNode? parentNode = targetNode?.parent;
+    if (targetNode == null || parentNode == null) {
+      return null;
+    }
 
-    // 如果只有一条消息，使用模板
-    if (messages.length == 1) {
-      final template = P.preference.promptTemplate.newChatTemplate.trim();
+    final List<int> idsFromTargetToRoot = P.msg.msgNode.q.msgIdsFrom(parentNode);
+    final List<int> orderedPathIds = idsFromTargetToRoot.reversed.where((int id) => id != 0).toList();
+    if (orderedPathIds.isEmpty) {
+      return null;
+    }
+
+    final List<Message> scopedMessages = <Message>[];
+    for (final int id in orderedPathIds) {
+      final Message? pathMessage = P.msg.pool.q[id];
+      if (pathMessage == null) {
+        continue;
+      }
+      if (pathMessage.type != MessageType.text) {
+        continue;
+      }
+      scopedMessages.add(pathMessage);
+    }
+    if (scopedMessages.isEmpty) {
+      return null;
+    }
+
+    final List<String> history = <String>[];
+    final bool isSingleTurnPath = scopedMessages.length == 1 && scopedMessages.first.isMine;
+    if (isSingleTurnPath) {
+      final String template = P.preference.promptTemplate.newChatTemplate.trim();
       if (template.isNotEmpty) {
-        return template.split("\n\n").where((e) => e.isNotEmpty).toList();
+        history.addAll(template.split("\n\n").where((String entry) => entry.isNotEmpty));
       }
     }
 
-    final result = <String>[];
+    for (int i = 0; i < scopedMessages.length; i = i + 2) {
+      final Message userMsg = scopedMessages[i];
+      final Message? botMsg = i + 1 < scopedMessages.length ? scopedMessages[i + 1] : null;
 
-    // 按用户消息和机器人消息配对处理
-    for (int i = 0; i < messages.length; i += 2) {
-      final userMsg = messages[i];
-      final botMsg = i + 1 < messages.length ? messages[i + 1] : null;
+      final String userContent = userMsg.getContentForHistoryWithRef(botMsg?.reference);
+      history.add(userContent);
 
-      // 处理用户消息
-      String userContent = userMsg.getContentForHistoryWithRef(botMsg?.reference);
-      if (wenYanWen.q == WenyanMode.classic) {
-        userContent = '$userContent 请用文言文回答。';
+      if (botMsg == null) {
+        continue;
       }
-      result.add(userContent);
-
-      // 处理机器人消息（如果存在）
-      if (botMsg != null) {
-        final botContent = botMsg.getHistoryContent();
-        result.add(botContent);
-      }
+      history.add(botMsg.getHistoryContent());
     }
 
-    return result;
+    return history;
   }
 
   Future<void> _pauseMessageById({required int id, bool isSensitive = false}) async {
@@ -1198,14 +2481,27 @@ extension _$Chat on _Chat {
       return;
     }
 
+    final pausedFakeBenchmark = await _pauseFakeBatchInferenceBenchmarkMessage(
+      id: id,
+      msg: msg,
+      isSensitive: isSensitive,
+    );
+    if (pausedFakeBenchmark) {
+      return;
+    }
+
     final (double? snapshotPrefillSpeed, double? snapshotDecodeSpeed) = _currentSpeedSnapshotForStore();
     final finalPrefillSpeed = snapshotPrefillSpeed ?? msg.prefillSpeed;
     final finalDecodeSpeed = snapshotDecodeSpeed ?? msg.decodeSpeed;
+    final double snapshotPeak = P.telemetry._peakDecodeSpeed.q;
     final currentGeneratedContent = id == receiveId.q ? receivedTokens.q : msg.content;
     final finalizedContent = currentGeneratedContent.isNotEmpty ? currentGeneratedContent : msg.content;
 
     _liveTokenCountThrottler.cancel();
-    P.rwkv.stop();
+    if (_responseStyleSequentialActive && _responseStyleSequentialMessageId == id) {
+      _responseStyleSequentialStopRequested = true;
+    }
+    P.rwkvGeneration.stop();
 
     final newMsg = msg.copyWith(
       content: finalizedContent,
@@ -1221,6 +2517,14 @@ extension _$Chat on _Chat {
         messageId: id,
         overrideBotContent: finalizedContent,
         persistToMessage: true,
+      ),
+    );
+
+    unawaited(
+      P.telemetry.maybeReport(
+        prefillSpeed: finalPrefillSpeed,
+        decodeSpeed: finalDecodeSpeed,
+        snapshotPeakDecodeSpeed: snapshotPeak,
       ),
     );
   }
@@ -1242,27 +2546,28 @@ extension _$Chat on _Chat {
   }
 
   void _onPageKeyChanged(PageKey pageKey) async {
-    final model = P.rwkv.latestModel.q;
+    final model = P.rwkvModel.latest.q;
     final isTTS = model?.isTTS ?? false;
     final isSee = model?.worldType != null;
     switch (pageKey) {
       case .completion:
         final isTranslate = model?.tags.contains("translate") ?? false;
-        if (isTTS || isTranslate || isSee) await P.rwkv._releaseAllModels();
+        if (isTTS || isTranslate || isSee) await P.rwkvModel._releaseAllModels();
         break;
       case .chat:
-        P.rwkv.updateSystemPrompt();
+      case .neko:
+        P.rwkvParams.updateSystemPrompt();
         P.app.demoType.q = .chat;
         final isTranslate = model?.tags.contains("translate") ?? false;
         if (isTTS || isTranslate || isSee) {
-          P.rwkv.currentWorldType.q = null;
-          await P.rwkv._releaseAllModels();
+          P.rwkvContext.currentWorldType.q = null;
+          await P.rwkvModel._releaseAllModels();
         }
         break;
       case .talk:
         if (!isTTS) {
-          P.rwkv.currentGroupInfo.q = null;
-          await P.rwkv._releaseAllModels();
+          P.rwkvContext.currentGroupInfo.q = null;
+          await P.rwkvModel._releaseAllModels();
         }
         break;
       default:
@@ -1315,6 +2620,8 @@ extension _$Chat on _Chat {
     final (double? snapshotPrefillSpeed, double? snapshotDecodeSpeed) = _currentSpeedSnapshotForStore();
     final finalPrefillSpeed = snapshotPrefillSpeed ?? currentMessage.prefillSpeed;
     final finalDecodeSpeed = snapshotDecodeSpeed ?? currentMessage.decodeSpeed;
+    // 在 _prefillAfterReply 之前快照 peak，否则新推理会 resetPeakDecodeSpeed
+    final double snapshotPeak = P.telemetry._peakDecodeSpeed.q;
 
     _updateMessageById(
       id: id,
@@ -1333,6 +2640,14 @@ extension _$Chat on _Chat {
     );
 
     _prefillAfterReply();
+
+    unawaited(
+      P.telemetry.maybeReport(
+        prefillSpeed: finalPrefillSpeed,
+        decodeSpeed: finalDecodeSpeed,
+        snapshotPeakDecodeSpeed: snapshotPeak,
+      ),
+    );
   }
 
   static final _thinkTagRegex = RegExp(r'<think>[\s\S]*?</think>');
@@ -1359,7 +2674,7 @@ extension _$Chat on _Chat {
     }
 
     receiveId.q = Config.chatPrefillId;
-    P.rwkv.sendMessages(history, maxLength: 0);
+    P.rwkvGeneration.sendMessages(history, maxLength: 0);
   }
 
   /// Update a message by id
@@ -1425,8 +2740,8 @@ extension _$Chat on _Chat {
   }
 
   (double? prefillSpeed, double? decodeSpeed) _currentSpeedSnapshotForStore() {
-    final currentPrefillSpeed = P.rwkv.prefillSpeed.q;
-    final currentDecodeSpeed = P.rwkv.decodeSpeed.q;
+    final currentPrefillSpeed = P.rwkvGeneration.prefillSpeed.q;
+    final currentDecodeSpeed = P.rwkvGeneration.decodeSpeed.q;
     final snapshotPrefillSpeed = currentPrefillSpeed > 0 ? currentPrefillSpeed : null;
     final snapshotDecodeSpeed = currentDecodeSpeed > 0 ? currentDecodeSpeed : null;
     return (snapshotPrefillSpeed, snapshotDecodeSpeed);
@@ -1504,8 +2819,8 @@ extension _$Chat on _Chat {
     if (history == null || history.isEmpty) return;
 
     final counts = await Future.wait([
-      P.rwkv.calculateTokensCountRaw(text: botContent),
-      P.rwkv.calculateTokensCountFromMessages(messages: history),
+      P.rwkvGeneration.calculateTokensCountRaw(text: botContent),
+      P.rwkvGeneration.calculateTokensCountFromMessages(messages: history),
     ]);
     final messageTokensCount = counts[0];
     final conversationTokensCount = counts[1];
@@ -1570,10 +2885,7 @@ extension _$Chat on _Chat {
       final Message userMsg = scopedMessages[i];
       final Message? botMsg = i + 1 < scopedMessages.length ? scopedMessages[i + 1] : null;
 
-      String userContent = userMsg.getContentForHistoryWithRef(botMsg?.reference);
-      if (wenYanWen.q == WenyanMode.classic) {
-        userContent = "$userContent 请用文言文回答。";
-      }
+      final String userContent = userMsg.getContentForHistoryWithRef(botMsg?.reference);
       history.add(userContent);
 
       if (botMsg == null) continue;
@@ -1588,18 +2900,18 @@ extension _$Chat on _Chat {
   }
 
   String? _resolveDecodeParamsSnapshotRaw() {
-    final backendParams = P.rwkv.backendBatchParams.q;
+    final backendParams = P.rwkvParams.backendBatchParams.q;
     if (backendParams.isNotEmpty) return backendParams.rawDecodeParams;
 
-    final frontendParams = P.rwkv.frontendBatchParams.q;
+    final frontendParams = P.rwkvParams.frontendBatchParams.q;
     if (frontendParams.isNotEmpty) return frontendParams.rawDecodeParams;
 
     final currentParam = SamplerAndPenaltyParam(
-      temperature: P.rwkv.arguments(Argument.temperature).q,
-      topP: P.rwkv.arguments(Argument.topP).q,
-      presencePenalty: P.rwkv.arguments(Argument.presencePenalty).q,
-      frequencyPenalty: P.rwkv.arguments(Argument.frequencyPenalty).q,
-      penaltyDecay: P.rwkv.arguments(Argument.penaltyDecay).q,
+      temperature: P.rwkvParams.arguments(Argument.temperature).q,
+      topP: P.rwkvParams.arguments(Argument.topP).q,
+      presencePenalty: P.rwkvParams.arguments(Argument.presencePenalty).q,
+      frequencyPenalty: P.rwkvParams.arguments(Argument.frequencyPenalty).q,
+      penaltyDecay: P.rwkvParams.arguments(Argument.penaltyDecay).q,
     );
     return <SamplerAndPenaltyParam>[currentParam].rawDecodeParams;
   }
@@ -1611,13 +2923,13 @@ extension _$Chat on _Chat {
     switch (event.type) {
       case _RWKVMessageType.isGenerating:
         final isGenerating = event.content == "true";
-        P.rwkv.generating.q = isGenerating;
+        P.rwkvGeneration.generating.q = isGenerating;
         if (!isGenerating && !completionMode.q) _fullyReceived(callingFunction: "_onStreamEvent:isGenerating");
         break;
 
       case _RWKVMessageType.streamResponse:
-        receivedTokens.q = event.content;
-        P.rwkv.generating.q = true;
+        _setReceivedTokens(event.content);
+        P.rwkvGeneration.generating.q = true;
         break;
 
       default:
@@ -1629,10 +2941,11 @@ extension _$Chat on _Chat {
     final pageKey = P.app.pageKey.q;
     if (pageKey == .translator) return;
     if (P.askQuestion.interceptingEvents.q) return;
+    if (_handleResponseStyleSequentialEvent(event)) return;
 
     switch (event) {
       case from_rwkv.ResponseBufferContent res:
-        receivedTokens.q = res.responseBufferContent;
+        _setReceivedTokens(res.responseBufferContent);
         if (completionMode.q) return;
         final currentReceiveId = receiveId.q;
         if (currentReceiveId != null) {
@@ -1647,8 +2960,8 @@ extension _$Chat on _Chat {
         break;
 
       case from_rwkv.ResponseBatchBufferContent res:
-        final responseBufferContent = res.responseBufferContent.join(Config.batchMarker) + Config.batchMarker + "-1";
-        receivedTokens.q = responseBufferContent;
+        final responseBufferContent = _buildBatchResponseBufferContent(res);
+        _setReceivedTokens(responseBufferContent);
         if (completionMode.q) return;
         final currentReceiveId = receiveId.q;
         if (currentReceiveId != null) {
@@ -1663,13 +2976,13 @@ extension _$Chat on _Chat {
         break;
 
       case from_rwkv.GenerateStop _:
-        receivedTokens.q = "";
-        P.rwkv.generating.q = false;
+        _setReceivedTokens("", immediateUi: true);
+        P.rwkvGeneration.generating.q = false;
         break;
 
       case from_rwkv.GenerateStart _:
-        receivedTokens.q = "";
-        P.rwkv.generating.q = true;
+        _setReceivedTokens("", immediateUi: true);
+        P.rwkvGeneration.generating.q = true;
         break;
 
       default:
@@ -1682,9 +2995,10 @@ extension _$Chat on _Chat {
     if (pageKey == .translator) return;
     qq;
     _liveTokenCountThrottler.cancel();
+    _clearResponseStyleSequentialState();
     final demoType = P.app.demoType.q;
     if (demoType != .chat && demoType != .see) return;
-    P.rwkv.generating.q = false;
+    P.rwkvGeneration.generating.q = false;
   }
 
   void _onStreamError(Object error, StackTrace stackTrace) async {
@@ -1692,10 +3006,11 @@ extension _$Chat on _Chat {
     if (pageKey == .translator) return;
     qqe("error: $error");
     _liveTokenCountThrottler.cancel();
+    _clearResponseStyleSequentialState();
     if (!kDebugMode) Sentry.captureException(error, stackTrace: stackTrace);
     final demoType = P.app.demoType.q;
     if (demoType != .chat && demoType != .see) return;
-    P.rwkv.generating.q = false;
+    P.rwkvGeneration.generating.q = false;
   }
 
   Future<List<String>> _historyWithWebSearch(int receiveId, List<String> allMessage) async {

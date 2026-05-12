@@ -1,5 +1,6 @@
 // Flutter imports:
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 // Package imports:
@@ -22,17 +23,144 @@ import 'package:zone/store/p.dart';
 
 // ignore: depend_on_referenced_packages
 
+const int _softBreakStep = 12;
+const int _softBreakMinRunLength = 24;
+const int _markdownPreprocessCacheLimit = 96;
+const String _softBreak = "\u200B";
+final RegExp _markdownFenceLineExp = RegExp(r"^(```|~~~)");
+final _markdownPreprocessCache = <String, String>{};
+const double _kInlineLatexDownwardShift = 1.5;
+
+String _prepareMarkdownRaw(String raw) {
+  final compactRaw = raw.replaceAll("\n\n", "\n").trim();
+  final cached = _markdownPreprocessCache.remove(compactRaw);
+  if (cached != null) {
+    _markdownPreprocessCache[compactRaw] = cached;
+    return cached;
+  }
+
+  final normalizedRaw = P.mdRender.normalizeLatexForMarkdown(compactRaw);
+  final breakableRaw = _insertSoftBreaksInLongRuns(normalizedRaw);
+  if (_markdownPreprocessCache.length >= _markdownPreprocessCacheLimit) {
+    _markdownPreprocessCache.remove(_markdownPreprocessCache.keys.first);
+  }
+  _markdownPreprocessCache[compactRaw] = breakableRaw;
+  return breakableRaw;
+}
+
+String _insertSoftBreaksInLongRuns(String raw) {
+  final lines = raw.split("\n");
+  final output = <String>[];
+  bool insideFence = false;
+  bool insideDisplayLatex = false;
+
+  for (final String line in lines) {
+    final trimmedLine = line.trim();
+    if (_isMarkdownFenceLine(trimmedLine)) {
+      insideFence = !insideFence;
+      output.add(line);
+      continue;
+    }
+
+    if (insideFence) {
+      output.add(line);
+      continue;
+    }
+
+    final startsDisplayLatex = trimmedLine.startsWith(r"\[");
+    final endsDisplayLatex = trimmedLine.endsWith(r"\]");
+    if (insideDisplayLatex || startsDisplayLatex || _containsInlineLatexDelimiter(line)) {
+      output.add(line);
+      if (startsDisplayLatex && !endsDisplayLatex) {
+        insideDisplayLatex = true;
+      }
+      if (insideDisplayLatex && endsDisplayLatex) {
+        insideDisplayLatex = false;
+      }
+      continue;
+    }
+
+    output.add(_insertSoftBreaksInLine(line));
+  }
+
+  return output.join("\n");
+}
+
+String _insertSoftBreaksInLine(String line) {
+  if (line.length < _softBreakMinRunLength) return line;
+
+  final buffer = StringBuffer();
+  int runStart = 0;
+  bool insertedBreaks = false;
+
+  for (int i = 0; i < line.length; i++) {
+    final codeUnit = line.codeUnitAt(i);
+    if (!_isSoftBreakRunBoundary(codeUnit)) continue;
+    insertedBreaks = _writeSoftBreakRun(line.substring(runStart, i), buffer) || insertedBreaks;
+    buffer.writeCharCode(codeUnit);
+    runStart = i + 1;
+  }
+
+  insertedBreaks = _writeSoftBreakRun(line.substring(runStart), buffer) || insertedBreaks;
+  if (!insertedBreaks) return line;
+  return buffer.toString();
+}
+
+bool _writeSoftBreakRun(String value, StringBuffer buffer) {
+  if (value.length < _softBreakMinRunLength || value.contains("://")) {
+    buffer.write(value);
+    return false;
+  }
+
+  for (int i = 0; i < value.length; i++) {
+    if (i > 0 && i % _softBreakStep == 0) {
+      buffer.write(_softBreak);
+    }
+    buffer.write(value[i]);
+  }
+  return true;
+}
+
+bool _isSoftBreakRunBoundary(int codeUnit) {
+  if (codeUnit == 0x24) return true;
+  if (codeUnit == 0x5C) return true;
+  if (codeUnit == 0x60) return true;
+  if (codeUnit <= 0x20) return true;
+  if (codeUnit == 0x85) return true;
+  if (codeUnit == 0xA0) return true;
+  if (codeUnit == 0x1680) return true;
+  if (codeUnit >= 0x2000 && codeUnit <= 0x200A) return true;
+  if (codeUnit == 0x2028) return true;
+  if (codeUnit == 0x2029) return true;
+  if (codeUnit == 0x202F) return true;
+  if (codeUnit == 0x205F) return true;
+  return codeUnit == 0x3000;
+}
+
+bool _isMarkdownFenceLine(String line) {
+  if (line.isEmpty) return false;
+  return _markdownFenceLineExp.hasMatch(line);
+}
+
+bool _containsInlineLatexDelimiter(String line) {
+  if (line.contains(r"\(")) return true;
+  if (line.contains(r"\)")) return true;
+  if (line.contains(r"$$")) return true;
+  return line.contains(r"$");
+}
 
 class MarkdownRender extends ConsumerWidget {
   final String raw;
   final Color? color;
   final bool useMessageLineHeight;
+  final double inlineLatexVerticalPaddingFactor;
 
   const MarkdownRender({
     super.key,
     required this.raw,
     this.color,
     this.useMessageLineHeight = false,
+    this.inlineLatexVerticalPaddingFactor = 0,
   });
 
   void _onTapLink(String? href, String title) async {
@@ -43,15 +171,13 @@ class MarkdownRender extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final normalizedRaw = P.mdRender.normalizeLatexForMarkdown(
-      raw.replaceAll("\n\n", "\n").trim(),
-    );
     final textScaler = MediaQuery.textScalerOf(context);
     final primary = theme.colorScheme.primary;
     const scale = Config.msgFontScale;
     final textScaleFactor = textScaler.scale(1.0);
     final effectiveScale = scale * textScaleFactor;
     final qb = ref.watch(P.app.qb);
+    final renderMarkdownAndLatexEnabled = ref.watch(P.preference.renderMarkdownAndLatexEnabled);
     final effectiveMessageLineHeight = ref.watch(P.preference.effectiveMessageLineHeight);
     final messageLineHeight = useMessageLineHeight ? effectiveMessageLineHeight : null;
     final gptMarkdownStyle = TextStyle(
@@ -59,6 +185,16 @@ class MarkdownRender extends ConsumerWidget {
       fontSize: Config.markdownBodyFontSize * effectiveScale,
       height: messageLineHeight,
     );
+
+    if (!renderMarkdownAndLatexEnabled) {
+      return SelectableText(
+        raw,
+        style: gptMarkdownStyle,
+        textScaler: .noScaling,
+      );
+    }
+
+    final breakableRaw = _prepareMarkdownRaw(raw);
 
     final headerFontSizes = Config.markdownHeaderFontSizes.map((e) => e * effectiveScale).toList();
 
@@ -79,7 +215,7 @@ class MarkdownRender extends ConsumerWidget {
     ];
 
     final gptMarkdown = GptMarkdown(
-      normalizedRaw,
+      breakableRaw,
       onLinkTap: _onTapLink,
       style: gptMarkdownStyle,
       textScaler: .noScaling,
@@ -88,6 +224,7 @@ class MarkdownRender extends ConsumerWidget {
         tex: tex,
         textStyle: textStyle,
         inline: inline,
+        inlineLatexVerticalPaddingFactor: inlineLatexVerticalPaddingFactor,
       ),
       useDollarSignsForLatex: true,
       addNewLineAfterH1: false,
@@ -107,6 +244,10 @@ class MarkdownRender extends ConsumerWidget {
         );
       },
       highlightBuilder: (context, text, style) => _Highlight(text: text, style: style),
+      tableBuilder: (context, tableRows, textStyle, config) => _MarkdownTable(
+        tableRows: tableRows,
+        config: config,
+      ),
     );
 
     return MediaQuery.withNoTextScaling(
@@ -132,16 +273,206 @@ class MarkdownRender extends ConsumerWidget {
   }
 }
 
+ScrollController? _findParentHorizontalScrollController(BuildContext context) {
+  ScrollController? parentController;
+  context.visitAncestorElements((element) {
+    final widget = element.widget;
+    if (widget is! Scrollable) return true;
+    final controller = widget.controller;
+    if (controller == null) return true;
+    if (!controller.hasClients) return true;
+    final position = controller.position;
+    if (position.axis != Axis.horizontal) return true;
+    parentController = controller;
+    return false;
+  });
+  return parentController;
+}
+
+class _ForwardingHorizontalScrollView extends StatefulWidget {
+  final Widget child;
+
+  const _ForwardingHorizontalScrollView({
+    required this.child,
+  });
+
+  @override
+  State<_ForwardingHorizontalScrollView> createState() => _ForwardingHorizontalScrollViewState();
+}
+
+class _ForwardingHorizontalScrollViewState extends State<_ForwardingHorizontalScrollView> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.horizontal) return false;
+    if (notification is! OverscrollNotification) return false;
+    final parentController = _findParentHorizontalScrollController(context);
+    if (parentController == null) return false;
+    if (!parentController.hasClients) return false;
+    final parentPosition = parentController.position;
+    final newOffset = (parentPosition.pixels + notification.overscroll).clamp(
+      parentPosition.minScrollExtent,
+      parentPosition.maxScrollExtent,
+    );
+    if (newOffset == parentPosition.pixels) return false;
+    parentController.jumpTo(newOffset);
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: _scrollController,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          scrollDirection: Axis.horizontal,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkdownTable extends StatelessWidget {
+  final List<CustomTableRow> tableRows;
+  final GptMarkdownConfig config;
+
+  const _MarkdownTable({
+    required this.tableRows,
+    required this.config,
+  });
+
+  TableCellVerticalAlignment get _defaultVerticalAlignment {
+    return TableCellVerticalAlignment.middle;
+  }
+
+  Widget _buildCell(BuildContext context, CustomTableField field) {
+    Widget content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: MdWidget(
+        context,
+        field.data.trim(),
+        false,
+        config: config,
+      ),
+    );
+
+    switch (field.alignment) {
+      case TextAlign.center:
+        content = Center(child: content);
+        break;
+      case TextAlign.right:
+        content = Align(
+          alignment: Alignment.centerRight,
+          child: content,
+        );
+        break;
+      case TextAlign.left:
+      default:
+        content = Align(
+          alignment: Alignment.centerLeft,
+          child: content,
+        );
+        break;
+    }
+
+    return content;
+  }
+
+  TableRow _buildRow(BuildContext context, CustomTableRow row) {
+    final theme = Theme.of(context);
+    return TableRow(
+      decoration: row.isHeader
+          ? BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+            )
+          : null,
+      children: [
+        for (final field in row.fields) _buildCell(context, field),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return _ForwardingHorizontalScrollView(
+      child: Table(
+        textDirection: config.textDirection,
+        defaultColumnWidth: CustomTableColumnWidth(),
+        defaultVerticalAlignment: _defaultVerticalAlignment,
+        border: TableBorder.all(
+          width: 1,
+          color: theme.colorScheme.onSurface,
+        ),
+        children: [
+          for (final row in tableRows) _buildRow(context, row),
+        ],
+      ),
+    );
+  }
+}
+
 class _LatexRender extends StatelessWidget {
   final String tex;
   final TextStyle textStyle;
   final bool inline;
+  final double inlineLatexVerticalPaddingFactor;
 
   const _LatexRender({
     required this.tex,
     required this.textStyle,
     required this.inline,
+    required this.inlineLatexVerticalPaddingFactor,
   });
+
+  double _resolveInlineVerticalPadding(BuildContext context, TextStyle effectiveTextStyle) {
+    if (!inline) return 0;
+    if (inlineLatexVerticalPaddingFactor <= 0) return 0;
+
+    final theme = Theme.of(context);
+    final fontSize = effectiveTextStyle.fontSize ?? theme.textTheme.bodyMedium?.fontSize ?? Config.markdownBodyFontSize;
+    final padding = fontSize * inlineLatexVerticalPaddingFactor;
+
+    if (padding < 1) return 1;
+    if (padding > 4) return 4;
+    return padding;
+  }
+
+  double _resolveAlphabeticBaseline(BuildContext context, TextStyle effectiveTextStyle, double inlineVerticalPadding) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: "x",
+        style: effectiveTextStyle,
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: TextScaler.noScaling,
+      maxLines: 1,
+    )..layout();
+
+    final theme = Theme.of(context);
+    final fallbackFontSize = effectiveTextStyle.fontSize ?? theme.textTheme.bodyMedium?.fontSize ?? Config.markdownBodyFontSize;
+    final textBaseline = textPainter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    final downwardShift = inlineLatexVerticalPaddingFactor > 0 ? _kInlineLatexDownwardShift : 0.0;
+    if (textBaseline <= 0) {
+      final fallbackBaseline = fallbackFontSize * .8 + inlineVerticalPadding - downwardShift;
+      if (fallbackBaseline < 1) return 1;
+      return fallbackBaseline;
+    }
+
+    final shiftedBaseline = textBaseline + inlineVerticalPadding - downwardShift;
+    if (shiftedBaseline < 1) return 1;
+    return shiftedBaseline;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -151,40 +482,127 @@ class _LatexRender extends StatelessWidget {
     );
     final effectiveColor = effectiveTextStyle.color ?? theme.colorScheme.onSurface;
     final mathStyle = inline ? MathStyle.text : MathStyle.display;
+    final inlineVerticalPadding = _resolveInlineVerticalPadding(context, effectiveTextStyle);
+    final alphabeticBaseline = _resolveAlphabeticBaseline(
+      context,
+      effectiveTextStyle,
+      inlineVerticalPadding,
+    );
 
     return SelectableAdapter(
       selectedText: tex,
-      child: Math.tex(
-        tex,
-        textStyle: effectiveTextStyle,
-        mathStyle: mathStyle,
-        textScaleFactor: 1,
-        settings: const TexParserSettings(strict: Strict.ignore),
-        options: MathOptions(
-          sizeUnderTextStyle: MathSize.large,
-          color: effectiveColor,
-          fontSize: effectiveTextStyle.fontSize ?? theme.textTheme.bodyMedium?.fontSize,
-          mathFontOptions: FontOptions(
-            fontFamily: "Main",
-            fontWeight: effectiveTextStyle.fontWeight ?? FontWeight.normal,
-            fontShape: FontStyle.normal,
-          ),
-          textFontOptions: FontOptions(
-            fontFamily: "Main",
-            fontWeight: effectiveTextStyle.fontWeight ?? FontWeight.normal,
-            fontShape: FontStyle.normal,
-          ),
-          style: mathStyle,
-        ),
-        onErrorFallback: (err) {
-          return Text(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final math = Math.tex(
             tex,
-            textDirection: Directionality.of(context),
-            style: effectiveTextStyle,
+            textStyle: effectiveTextStyle,
+            mathStyle: mathStyle,
+            textScaleFactor: 1,
+            settings: const TexParserSettings(strict: Strict.ignore),
+            options: MathOptions(
+              sizeUnderTextStyle: MathSize.large,
+              color: effectiveColor,
+              fontSize: effectiveTextStyle.fontSize ?? theme.textTheme.bodyMedium?.fontSize,
+              mathFontOptions: FontOptions(
+                fontFamily: "Main",
+                fontWeight: effectiveTextStyle.fontWeight ?? .normal,
+                fontShape: FontStyle.normal,
+              ),
+              textFontOptions: FontOptions(
+                fontFamily: "Main",
+                fontWeight: effectiveTextStyle.fontWeight ?? .normal,
+                fontShape: FontStyle.normal,
+              ),
+              style: mathStyle,
+            ),
+            onErrorFallback: (err) {
+              return Text(
+                _insertSoftBreaksInLongRuns(tex),
+                textDirection: Directionality.of(context),
+                style: effectiveTextStyle,
+              );
+            },
+          );
+
+          final Widget scrollChild;
+          if (!constraints.hasBoundedWidth) {
+            scrollChild = math;
+          } else {
+            scrollChild = SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: math,
+            );
+          }
+
+          Widget child = scrollChild;
+          if (inlineVerticalPadding > 0) {
+            child = Padding(
+              padding: EdgeInsets.symmetric(vertical: inlineVerticalPadding),
+              child: child,
+            );
+          }
+
+          if (!inline) {
+            return child;
+          }
+
+          return _InlineLatexBaselineProxy(
+            baseline: alphabeticBaseline,
+            child: child,
           );
         },
       ),
     );
+  }
+}
+
+class _InlineLatexBaselineProxy extends SingleChildRenderObjectWidget {
+  final double baseline;
+
+  const _InlineLatexBaselineProxy({
+    required this.baseline,
+    required super.child,
+  });
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderInlineLatexBaselineProxy(baseline: baseline);
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    final proxy = renderObject as _RenderInlineLatexBaselineProxy;
+    proxy.baseline = baseline;
+  }
+}
+
+class _RenderInlineLatexBaselineProxy extends RenderProxyBox {
+  _RenderInlineLatexBaselineProxy({
+    required double baseline,
+  }) : _baseline = baseline;
+
+  double _baseline;
+
+  set baseline(double value) {
+    if (_baseline == value) return;
+    _baseline = value;
+    markNeedsLayout();
+  }
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) {
+    if (baseline != TextBaseline.alphabetic) {
+      return super.computeDistanceToActualBaseline(baseline);
+    }
+    return _baseline;
+  }
+
+  @override
+  double? computeDryBaseline(covariant BoxConstraints constraints, TextBaseline baseline) {
+    if (baseline != TextBaseline.alphabetic) {
+      return super.computeDryBaseline(constraints, baseline);
+    }
+    return _baseline;
   }
 }
 

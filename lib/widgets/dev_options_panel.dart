@@ -2,15 +2,17 @@
 import 'package:flutter/material.dart';
 
 // Package imports:
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:halo_state/halo_state.dart';
 
 // Project imports:
+import 'package:zone/gen/l10n.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/router/page_key.dart';
 import 'package:zone/store/albatross.dart';
 import 'package:zone/store/p.dart';
 
-class DevOptionsPanel extends StatefulWidget {
+class DevOptionsPanel extends ConsumerStatefulWidget {
   static const String _panelKey = 'DevOptionsPanel';
   final ScrollController scrollController;
 
@@ -31,7 +33,7 @@ class DevOptionsPanel extends StatefulWidget {
   static Widget trigger({required Widget child}) => _DevOptionsTrigger(child: child);
 
   @override
-  State<DevOptionsPanel> createState() => _DevOptionsPanelState();
+  ConsumerState<DevOptionsPanel> createState() => _DevOptionsPanelState();
 }
 
 class _DevOptionsTrigger extends StatefulWidget {
@@ -66,7 +68,7 @@ class _DevOptionsTriggerState extends State<_DevOptionsTrigger> {
   }
 }
 
-class _DevOptionsPanelState extends State<DevOptionsPanel> {
+class _DevOptionsPanelState extends ConsumerState<DevOptionsPanel> {
   final TextEditingController _controllerHost = TextEditingController(text: Albatross.instance.host);
 
   @override
@@ -95,7 +97,17 @@ class _DevOptionsPanelState extends State<DevOptionsPanel> {
   }
 
   void _onAlbatrossChanged(bool value) {
-    P.rwkv.enableAlbatross.q = value;
+    P.rwkvFeature.enableAlbatross.q = value;
+    setState(() {});
+  }
+
+  void _onTelemetryChanged(bool value) {
+    P.telemetry.setEnabled(value);
+    setState(() {});
+  }
+
+  void _onRenderMarkdownAndLatexChanged(bool value) {
+    P.preference.setRenderMarkdownAndLatexEnabled(value);
     setState(() {});
   }
 
@@ -112,6 +124,8 @@ class _DevOptionsPanelState extends State<DevOptionsPanel> {
     final cardColor = theme.colorScheme.surfaceContainerHighest;
     final borderColor = theme.colorScheme.outlineVariant;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
+    final fakeBatchInferenceBenchmarkEnabled = ref.watch(P.chat.fakeBatchInferenceBenchmarkEnabled);
+    final renderMarkdownAndLatexEnabled = ref.watch(P.preference.renderMarkdownAndLatexEnabled);
 
     return ClipRRect(
       borderRadius: const .only(
@@ -152,10 +166,31 @@ class _DevOptionsPanelState extends State<DevOptionsPanel> {
                         ),
                         Container(height: .5, color: borderColor),
                         _DevSwitchItem(
+                          title: S.current.fake_batch_inference_benchmark,
+                          subtitle: 'Replace real chat inference with random UI-only streaming output.',
+                          value: fakeBatchInferenceBenchmarkEnabled,
+                          onChanged: P.chat.onFakeBatchInferenceBenchmarkChanged,
+                        ),
+                        Container(height: .5, color: borderColor),
+                        _DevSwitchItem(
+                          title: 'Markdown + LaTeX',
+                          subtitle: 'Disable to render assistant output as plain text only.',
+                          value: renderMarkdownAndLatexEnabled,
+                          onChanged: _onRenderMarkdownAndLatexChanged,
+                        ),
+                        Container(height: .5, color: borderColor),
+                        _DevSwitchItem(
                           title: 'Albatross',
                           subtitle: 'Use Albatross bridge in RWKV runtime.',
-                          value: P.rwkv.enableAlbatross.q,
+                          value: P.rwkvFeature.enableAlbatross.q,
                           onChanged: _onAlbatrossChanged,
+                        ),
+                        Container(height: .5, color: borderColor),
+                        _DevSwitchItem(
+                          title: 'Telemetry',
+                          subtitle: 'Upload anonymous inference speed after each reply.',
+                          value: P.telemetry.enabled.q,
+                          onChanged: _onTelemetryChanged,
                         ),
                       ],
                     ),
@@ -242,6 +277,9 @@ class _DevApplyButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final backgroundColor = dark ? Colors.white : Colors.black;
+    final foregroundColor = dark ? Colors.black : Colors.white;
 
     return Container(
       decoration: BoxDecoration(
@@ -251,12 +289,17 @@ class _DevApplyButton extends StatelessWidget {
       child: FilledButton(
         onPressed: pop,
         style: FilledButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: foregroundColor,
           minimumSize: const Size.fromHeight(44),
           shape: RoundedRectangleBorder(borderRadius: .circular(12)),
         ),
         child: Text(
-          'Apply All Changes',
-          style: theme.textTheme.labelLarge?.copyWith(fontWeight: .w600),
+          'Apply all changes',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: foregroundColor,
+            fontWeight: .w600,
+          ),
         ),
       ),
     );

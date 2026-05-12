@@ -13,7 +13,6 @@ import 'package:zone/gen/l10n.dart';
 import 'package:zone/model/argument.dart';
 import 'package:zone/model/decode_param_type.dart';
 import 'package:zone/model/sampler_and_penalty_param.dart';
-import 'package:zone/model/wenyan_mode.dart';
 import 'package:zone/router/method.dart';
 import 'package:zone/router/router.dart';
 import 'package:zone/store/p.dart';
@@ -63,17 +62,13 @@ class BatchSettingsPanel extends ConsumerWidget {
     if (argument.step != null) rawNewValue = (rawNewValue / argument.step!).round() * argument.step!.toInt();
     final currentValue = switch (argument) {
       Argument.batchCount => P.chat.batchCount.q,
-      Argument.batchVW => P.chat.batchVW.q,
       _ => 0,
     };
     if (currentValue == rawNewValue) return;
     if (argument.enableGaimon) P.app.hapticLight();
     switch (argument) {
       case Argument.batchCount:
-        P.chat.batchCount.q = rawNewValue;
-        P.chat.wenYanWen.q = WenyanMode.off;
-      case Argument.batchVW:
-        P.chat.batchVW.q = rawNewValue;
+        P.chat.onManualBatchCountChanged(rawNewValue);
       default:
         throw UnimplementedError();
     }
@@ -91,12 +86,14 @@ class BatchSettingsPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final s = S.of(context);
-    final batchCount = ref.watch(P.chat.batchCount);
+    final batchCount = ref.watch(P.chat.effectiveBatchCount);
     final appTheme = ref.watch(P.app.theme);
-    final batchInference = ref.watch(P.chat.batchEnabled);
-    final batchVW = ref.watch(P.chat.batchVW);
+    final batchInference = ref.watch(P.chat.effectiveBatchEnabled);
+    final batchViewportWidth = ref.watch(P.ui.batchViewportWidth);
     final featureRollout = ref.watch(P.app.featureRollout);
+    final fakeBatchInferenceBenchmarkEnabled = ref.watch(P.chat.fakeBatchInferenceBenchmarkEnabled);
 
     return ClipRRect(
       borderRadius: const .only(
@@ -109,6 +106,7 @@ class BatchSettingsPanel extends ConsumerWidget {
           title: Text(s.batch_inference_settings),
           automaticallyImplyLeading: false,
           backgroundColor: appTheme.settingBg,
+          foregroundColor: theme.colorScheme.onSurface,
           actions: [
             Padding(
               padding: const .only(right: 8),
@@ -125,6 +123,10 @@ class BatchSettingsPanel extends ConsumerWidget {
           controller: scrollController,
           padding: const .only(left: 12, right: 12, bottom: 12),
           children: [
+            if (fakeBatchInferenceBenchmarkEnabled) ...[
+              const _FakeBatchInferenceBenchmarkNotice(),
+              const SizedBox(height: 8),
+            ],
             FormItem(
               isSectionStart: true,
               isSectionEnd: !batchInference,
@@ -133,7 +135,7 @@ class BatchSettingsPanel extends ConsumerWidget {
               infoText: batchInference ? s.enabled : s.disabled,
               showArrow: false,
               trailing: Switch.adaptive(
-                value: P.chat.batchEnabled.q,
+                value: batchInference,
                 onChanged: P.chat.onBatchInferenceSwitchChanged,
               ),
             ),
@@ -204,20 +206,117 @@ class BatchSettingsPanel extends ConsumerWidget {
                 isSectionEnd: true,
                 title: s.batch_inference_width,
                 subtitle: s.batch_inference_width_detail,
-                infoText: batchVW.toString() + "% " + s.screen_width,
+                infoText: batchViewportWidth.toString() + "% " + s.screen_width,
                 onTap: () {},
-                bottom: ArgumentValue(
-                  Argument.batchVW,
+                bottom: _BatchViewportWidthSlider(
                   enabled: batchInference,
-                  _onChanged,
-                  showTitle: false,
-                  showValue: false,
                   padding: const .only(left: 4, top: 12, right: 4, bottom: 8),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _BatchViewportWidthSlider extends ConsumerWidget {
+  final bool enabled;
+  final EdgeInsets padding;
+
+  const _BatchViewportWidthSlider({
+    required this.enabled,
+    required this.padding,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final value = ref.watch(P.ui.batchViewportWidth);
+    final min = P.ui.batchViewportWidthMin;
+    final max = P.ui.batchViewportWidthMax;
+    final step = P.ui.batchViewportWidthStep;
+    final qb = ref.watch(P.app.qb);
+
+    return Column(
+      crossAxisAlignment: .stretch,
+      children: [
+        padding.top.h,
+        Row(
+          children: [
+            padding.left.w,
+            Text(
+              min.toString(),
+              style: TS(s: 12, c: qb.q(.5)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Slider(
+                activeColor: enabled ? null : theme.disabledColor,
+                divisions: (max - min) ~/ step,
+                padding: .zero,
+                value: value.toDouble(),
+                min: min.toDouble(),
+                max: max.toDouble(),
+                onChanged: enabled ? (value) => P.ui.setBatchViewportWidth(value.round()) : null,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Text(
+              max.toString(),
+              style: TS(s: 12, c: qb.q(.5)),
+            ),
+            padding.right.w,
+          ],
+        ),
+        padding.bottom.h,
+      ],
+    );
+  }
+}
+
+class _FakeBatchInferenceBenchmarkNotice extends StatelessWidget {
+  const _FakeBatchInferenceBenchmarkNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final s = S.of(context);
+    final color = theme.colorScheme.error;
+
+    return Container(
+      padding: const .symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.q(.12),
+        borderRadius: .circular(10),
+        border: .all(color: color.q(.7), width: .5),
+      ),
+      child: Row(
+        crossAxisAlignment: .start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: .start,
+              children: [
+                Text(
+                  "${s.fake_batch_inference_benchmark}: ${s.enabled}",
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: color,
+                    fontWeight: .w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "Chat inference is currently replaced by UI-only benchmark output.",
+                  style: theme.textTheme.bodySmall?.copyWith(color: color),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -253,7 +352,7 @@ class _DecodeParams extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final frontendBatchParams = ref.watch(P.rwkv.frontendBatchParams);
+    final frontendBatchParams = ref.watch(P.rwkvParams.frontendBatchParams);
     final batchCount = ref.watch(P.chat.batchCount);
     final paramsToShow = frontendBatchParams.take(batchCount).toList();
     final qb = ref.watch(P.app.qb);
@@ -373,20 +472,20 @@ class _DecodeParam extends ConsumerWidget {
     }
 
     final newValue = forAll
-        ? List.generate(P.rwkv.frontendBatchParams.q.length, (index) => newParam)
+        ? List.generate(P.rwkvParams.frontendBatchParams.q.length, (index) => newParam)
         : [
-            ...P.rwkv.frontendBatchParams.q.sublist(0, index),
+            ...P.rwkvParams.frontendBatchParams.q.sublist(0, index),
             newParam,
-            ...P.rwkv.frontendBatchParams.q.sublist(index + 1),
+            ...P.rwkvParams.frontendBatchParams.q.sublist(index + 1),
           ];
 
-    final modelID = P.rwkv.findModelIDByWeightType(weightType: .chat);
+    final modelID = P.rwkvModel.findModelIDByWeightType(weightType: .chat);
     if (modelID == null) {
       return;
     }
 
-    P.rwkv.frontendBatchParams.q = newValue;
-    P.rwkv.send(
+    P.rwkvParams.frontendBatchParams.q = newValue;
+    P.rwkvBridge.send(
       SetSamplerAndPenaltyParams(
         temperatures: newValue.map((e) => e.temperature).toList(),
         topKs: newValue.map((e) => 500.0).toList(),
@@ -397,7 +496,7 @@ class _DecodeParam extends ConsumerWidget {
         modelID: modelID,
       ),
     );
-    P.rwkv.send(GetSamplerAndPenaltyParams(batchSize: P.chat.batchCount.q, modelID: modelID));
+    P.rwkvBridge.send(GetSamplerAndPenaltyParams(batchSize: P.chat.batchCount.q, modelID: modelID));
   }
 
   String _fmt(double value) {
